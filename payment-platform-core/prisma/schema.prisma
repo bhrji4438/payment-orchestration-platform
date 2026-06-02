@@ -1,0 +1,499 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String    @id @db.Uuid
+  email     String    @unique
+  password  String
+  name      String
+  roleId    String    @db.Uuid
+  role      Role      @relation(fields: [roleId], references: [id])
+  
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  merchantUsers MerchantUser[]
+  auditLogs     AuditLog[]
+
+  @@map("users")
+}
+
+model Role {
+  id          String           @id @db.Uuid
+  name        String           @unique
+  description String?
+  permissions RolePermission[]
+  users       User[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @db.Uuid
+  name        String           @unique
+  description String?
+  roles       RolePermission[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String     @db.Uuid
+  permissionId String     @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model Merchant {
+  id        String   @id @db.Uuid
+  name      String
+  status    String   @default("ACTIVE") // ACTIVE, SUSPENDED
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  merchantUsers MerchantUser[]
+  customers     Customer[]
+  gatewayConfigs MerchantGatewayConfiguration[]
+  payments      Payment[]
+  apiKeys       ApiKey[]
+  invoices      Invoice[]
+  auditLogs     AuditLog[]
+  idempotencyKeys IdempotencyKey[]
+  settlements    Settlement[]
+
+  @@map("merchants")
+}
+
+model MerchantUser {
+  id         String   @id @db.Uuid
+  merchantId String   @db.Uuid
+  userId     String   @db.Uuid
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  @@unique([merchantId, userId])
+  @@map("merchant_users")
+}
+
+model Customer {
+  id         String   @id @db.Uuid
+  merchantId String   @db.Uuid
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  email      String
+  name       String?
+  phone      String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  payments   Payment[]
+
+  @@unique([merchantId, email])
+  @@map("customers")
+}
+
+model GatewayProvider {
+  id          String   @id @db.Uuid
+  code        String   @unique // STRIPE, AUTHORIZE_NET, NMI, CUSTOM, CARDPOINTE
+  name        String
+  isActive    Boolean  @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  merchantConfigs MerchantGatewayConfiguration[]
+
+  @@map("gateway_providers")
+}
+
+model MerchantGatewayConfiguration {
+  id                 String          @id @db.Uuid
+  merchantId         String          @db.Uuid
+  merchant           Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  gatewayProviderId  String          @db.Uuid
+  gatewayProvider    GatewayProvider @relation(fields: [gatewayProviderId], references: [id])
+  displayName        String
+  encryptedCredentials String         @db.Text
+  priority           Int             @default(1)
+  isDefault          Boolean         @default(false)
+  isActive           Boolean         @default(true)
+  environment        String          @default("SANDBOX") // SANDBOX, PRODUCTION
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  paymentAttempts PaymentAttempt[]
+  settlements     Settlement[]
+  payments        Payment[]
+
+  @@map("merchant_gateway_configurations")
+}
+
+model Payment {
+  id            String   @id @db.Uuid
+  merchantId    String   @db.Uuid
+  merchant      Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  customerId    String?  @db.Uuid
+  customer      Customer? @relation(fields: [customerId], references: [id])
+  gatewayConfigId String? @db.Uuid
+  gatewayConfig MerchantGatewayConfiguration? @relation(fields: [gatewayConfigId], references: [id])
+  
+  amount        Decimal  @db.Decimal(18, 4)
+  currency      String   @default("USD")
+  status        String   @default("PENDING") // PENDING, AUTHORIZED, CAPTURED, FAILED, REFUNDED, VOIDED
+  version       Int      @default(1) // Optimistic Locking
+  
+  cardBrand     String?
+  cardLastFour  String?
+  cardExpiry    String? // MM/YYYY
+  gatewayToken  String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  attempts     PaymentAttempt[]
+  transactions Transaction[]
+  refunds      Refund[]
+  voids        Void[]
+  invoices     Invoice[]
+  settlementItems SettlementItem[]
+
+  @@index([merchantId, status])
+  @@map("payments")
+}
+
+model PaymentAttempt {
+  id              String   @id @db.Uuid
+  paymentId       String   @db.Uuid
+  payment         Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  gatewayConfigId String   @db.Uuid
+  gatewayConfig   MerchantGatewayConfiguration @relation(fields: [gatewayConfigId], references: [id])
+  
+  action          String   // AUTHORIZE, CAPTURE, SALE, REFUND, VOID
+  amount          Decimal  @db.Decimal(18, 4)
+  status          String   // SUCCESS, FAILED, ERROR
+  gatewayTxnId    String?  // Reference ID from Gateway
+  responseCode    String?
+  responseMessage String?  @db.Text
+  rawResponse     String?  @db.Text
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  @@map("payment_attempts")
+}
+
+model Transaction {
+  id         String   @id @db.Uuid
+  paymentId  String   @db.Uuid
+  payment    Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  amount     Decimal  @db.Decimal(18, 4)
+  type       String   // CREDIT, DEBIT
+  status     String   // SETTLED, PENDING, REVERSED
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  @@map("transactions")
+}
+
+model Refund {
+  id           String   @id @db.Uuid
+  paymentId    String   @db.Uuid
+  payment      Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  amount       Decimal  @db.Decimal(18, 4)
+  reason       String?
+  status       String   @default("PENDING") // PENDING, SUCCESS, FAILED
+  gatewayTxnId String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  @@map("refunds")
+}
+
+model Void {
+  id           String   @id @db.Uuid
+  paymentId    String   @db.Uuid
+  payment      Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  reason       String?
+  status       String   @default("PENDING") // PENDING, SUCCESS, FAILED
+  gatewayTxnId String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  @@map("voids")
+}
+
+model Invoice {
+  id         String   @id @db.Uuid
+  merchantId String   @db.Uuid
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  paymentId  String   @db.Uuid
+  payment    Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  number     String   @unique
+  pdfUrl     String?
+  status     String   @default("UNPAID") // UNPAID, PAID, VOIDED
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  @@map("invoices")
+}
+
+model Notification {
+  id         String   @id @db.Uuid
+  merchantId String   @db.Uuid
+  type       String   // EMAIL, SMS, WEBHOOK, PUSH
+  recipient  String
+  payload    String   @db.Text
+  status     String   @default("PENDING") // PENDING, SENT, FAILED
+  attempts   Int      @default(0)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         String   @id @db.Uuid
+  merchantId String?  @db.Uuid
+  merchant   Merchant? @relation(fields: [merchantId], references: [id])
+  userId     String?  @db.Uuid
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  entityName String
+  entityId   String?
+  payload    String   @db.Text
+  ipAddress  String?
+  userAgent  String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  @@map("audit_logs")
+}
+
+model IdempotencyKey {
+  id             String   @id @db.Uuid
+  merchantId     String   @db.Uuid
+  merchant       Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  idempotencyKey String
+  requestHash    String
+  responsePayload String  @db.Text
+  status         String   // PROCESSING, COMPLETED, FAILED
+  expiresAt      DateTime
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  @@unique([merchantId, idempotencyKey])
+  @@map("idempotency_keys")
+}
+
+model OutboxEvent {
+  id          String   @id @db.Uuid
+  topic       String
+  key         String?
+  payload     String   @db.Text
+  status      String   @default("PENDING") // PENDING, PUBLISHED, FAILED
+  attempts    Int      @default(0)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  @@index([status])
+  @@map("outbox_events")
+}
+
+model Settlement {
+  id                String          @id @db.Uuid
+  merchantId        String          @db.Uuid
+  merchant          Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  gatewayConfigId   String          @db.Uuid
+  gatewayConfig     MerchantGatewayConfiguration @relation(fields: [gatewayConfigId], references: [id])
+  settlementDate    DateTime
+  totalAmount       Decimal         @db.Decimal(18, 4)
+  currency          String          @default("USD")
+  status            String          @default("PENDING") // PENDING, MATCHED, DISCREPANCY
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  items SettlementItem[]
+
+  @@map("settlements")
+}
+
+model SettlementItem {
+  id           String     @id @db.Uuid
+  settlementId String     @db.Uuid
+  settlement   Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  paymentId    String?    @db.Uuid
+  payment      Payment?   @relation(fields: [paymentId], references: [id])
+  gatewayTxnId String
+  amount       Decimal    @db.Decimal(18, 4)
+  status       String     // MATCHED, MISSING_CORE, MISSING_GATEWAY, VARIANCE
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  @@map("settlement_items")
+}
+
+model ApiKey {
+  id          String   @id @db.Uuid
+  merchantId  String   @db.Uuid
+  merchant    Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  hashedKey   String   @unique
+  prefix      String   // sk_xxxx
+  name        String
+  isActive    Boolean  @default(true)
+  expiresAt   DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  usages ApiKeyUsage[]
+
+  @@map("api_keys")
+}
+
+model ApiKeyUsage {
+  id        String   @id @db.Uuid
+  apiKeyId  String   @db.Uuid
+  apiKey    ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  endpoint  String
+  ipAddress String?
+  status    Int
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  @@map("api_key_usage")
+}
+
+model WebhookDelivery {
+  id           String   @id @db.Uuid
+  endpoint     String
+  payload      String   @db.Text
+  headers      String?  @db.Text
+  responseCode Int?
+  responseBody String?  @db.Text
+  status       String   // SUCCESS, FAILED
+  durationMs   Int
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  @@map("webhook_deliveries")
+}
+
+model EventStore {
+  id            String   @id @db.Uuid
+  aggregateType String   // PAYMENT, REFUND, MERCHANT
+  aggregateId   String
+  eventType     String
+  eventVersion  Int
+  payload       String   @db.Text
+  metadata      String?  @db.Text
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String?
+  updatedBy String?
+
+  @@index([aggregateType, aggregateId])
+  @@map("event_store")
+}

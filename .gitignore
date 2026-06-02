@@ -1,0 +1,72 @@
+# =============================================================================
+# PAYMENT ORCHESTRATION PLATFORM — .gitignore
+# =============================================================================
+
+# ── Node.js ───────────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+.npm/
+
+# ── TypeScript / Build Output ─────────────────────────────────────────────────
+dist/
+build/
+*.tsbuildinfo
+*.js.map
+
+# ── Environment & Secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# ── Prisma ────────────────────────────────────────────────────────────────────
+# Generated client is regenerated from schema at build time
+**/prisma/generated/
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+.docker/
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+logs/
+*.log
+combined.log
+error.log
+
+# ── Test Coverage ─────────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+*.lcov
+
+# ── Cache ─────────────────────────────────────────────────────────────────────
+.cache/
+.turbo/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+
+# ── Next.js (portal) ──────────────────────────────────────────────────────────
+.next/
+out/
+
+# ── OS Files ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Editor / IDE ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Temporary Files ───────────────────────────────────────────────────────────
+tmp/
+temp/
+*.tmp

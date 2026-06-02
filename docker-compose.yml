@@ -1,0 +1,218 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: payment_orchestrator_db
+    environment:
+      POSTGRES_DB: payment_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Password@123
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d payment_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: payment_orchestrator_cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: payment_orchestrator_zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: payment_orchestrator_broker
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    depends_on:
+      - zookeeper
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 9092 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: payment_orchestrator_mailhog
+    ports:
+      - "1025:1025" # SMTP port
+      - "8025:8025" # Web GUI port
+
+  minio:
+    image: minio/minio:latest
+    container_name: payment_orchestrator_minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - miniodata:/data
+
+  payment-platform-core:
+    build:
+      context: .
+      dockerfile: payment-platform-core/Dockerfile
+    container_name: payment_platform_core
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:Password@123@postgres:5432/payment_platform?schema=public
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_ENABLED: "true"
+      ENCRYPTION_MASTER_KEY: cGxhdGZvcm1fbW9kdWxhcl9tb25vbGl0aF9zZWNyZXRfa2V5XzIwMjY=
+      NODE_ENV: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  invoice-service:
+    build:
+      context: .
+      dockerfile: services/invoice-service/Dockerfile
+    container_name: invoice_service
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgresql://postgres:Password@123@postgres:5432/payment_platform?schema=public
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_ENABLED: "true"
+      MINIO_ENDPOINT: minio:9000
+      NODE_ENV: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: services/notification-service/Dockerfile
+    container_name: notification_service
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      DATABASE_URL: postgresql://postgres:Password@123@postgres:5432/payment_platform?schema=public
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_ENABLED: "true"
+      SMTP_HOST: mailhog
+      SMTP_PORT: 1025
+      NODE_ENV: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+
+  audit-service:
+    build:
+      context: .
+      dockerfile: services/audit-service/Dockerfile
+    container_name: audit_service
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: 3003
+      DATABASE_URL: postgresql://postgres:Password@123@postgres:5432/payment_platform?schema=public
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_ENABLED: "true"
+      NODE_ENV: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  settlement-service:
+    build:
+      context: .
+      dockerfile: services/settlement-service/Dockerfile
+    container_name: settlement_service
+    ports:
+      - "3004:3004"
+    environment:
+      PORT: 3004
+      DATABASE_URL: postgresql://postgres:Password@123@postgres:5432/payment_platform?schema=public
+      NODE_ENV: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  reporting-service:
+    build:
+      context: .
+      dockerfile: services/reporting-service/Dockerfile
+    container_name: reporting_service
+    ports:
+      - "3005:3005"
+    environment:
+      PORT: 3005
+      DATABASE_URL: postgresql://postgres:Password@123@postgres:5432/payment_platform?schema=public
+      NODE_ENV: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  payment-platform-portal:
+    build:
+      context: .
+      dockerfile: payment-platform-portal/Dockerfile
+    container_name: payment_platform_portal
+    ports:
+      - "3006:3006"
+    environment:
+      PORT: 3006
+      NEXT_PUBLIC_CORE_API_URL: http://localhost:3000
+      NEXT_PUBLIC_REPORTING_API_URL: http://localhost:3005
+      NODE_ENV: development
+    depends_on:
+      - payment-platform-core
+      - reporting-service
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

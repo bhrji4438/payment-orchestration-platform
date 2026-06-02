@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-core-deployment
+  namespace: default
+  labels:
+    app: payment-core
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: payment-core
+  template:
+    metadata:
+      labels:
+        app: payment-core
+    spec:
+      containers:
+      - name: payment-core
+        image: payment-orchestrator-core:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3001
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: payment-secrets
+              key: database-url
+        - name: ENCRYPTION_MASTER_KEY
+          valueFrom:
+            secretKeyRef:
+              name: payment-secrets
+              key: encryption-master-key
+        - name: KAFKA_BROKERS
+          valueFrom:
+            configMapKeyRef:
+              name: payment-config
+              key: kafka-brokers
+        - name: PORT
+          value: "3001"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: payment-config
+  namespace: default
+data:
+  kafka-brokers: "kafka-service:9092"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: payment-secrets
+  namespace: default
+type: Opaque
+data:
+  database-url: cG9zdGdyZXNxbDovL3Bvc3RncmVzOlBhc3N3b3JkQDEyM0Bwb3N0Z3Jlcy1zZXJ2aWNlOjU0MzIvcGF5bWVudF9wbGF0Zm9ybQ== # Base64 for postgresql://postgres:Password@123@postgres-service:5432/payment_platform
+  encryption-master-key: cGxhdGZvcm1fbW9kdWxhcl9tb25vbGl0aF9zZWNyZXRfa2V5XzIwMjY= # Base64 for default key

@@ -1,0 +1,58 @@
+# =============================================================================
+# PAYMENT ORCHESTRATION PLATFORM — .dockerignore
+# =============================================================================
+
+# ── Node Modules (each service installs its own) ──────────────────────────────
+**/node_modules/
+
+# ── Build Output (rebuilt inside container) ───────────────────────────────────
+**/dist/
+**/build/
+**/.next/
+**/out/
+
+# ── Environment & Secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# ── Git ───────────────────────────────────────────────────────────────────────
+.git/
+.gitignore
+.github/
+
+# ── Test & Coverage ───────────────────────────────────────────────────────────
+**/coverage/
+**/__tests__/
+**/*.test.ts
+**/*.spec.ts
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Editor / IDE ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── OS Files ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Documentation (not needed in container) ──────────────────────────────────
+docs/
+*.md
+!payment-platform-core/prisma/*.md
+
+# ── SDK (standalone package, not part of services) ───────────────────────────
+payment-platform-sdk/
+
+# ── Cache ─────────────────────────────────────────────────────────────────────
+.cache/
+.turbo/
+.eslintcache

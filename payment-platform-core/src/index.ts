@@ -1,0 +1,84 @@
+import express, { Request, Response, NextFunction } from 'express';
+import helmet from 'helmet';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import pino from 'pino';
+import paymentRoutes from './modules/payments/payment.routes.ts';
+import webhookRoutes from './modules/webhooks/webhook.routes.ts';
+import { outboxPublisher } from './infrastructure/outbox/outbox-publisher.ts';
+import { kafkaService } from './infrastructure/kafka/kafka.service.ts';
+
+dotenv.config();
+
+const logger = pino({
+  transport: { target: 'pino-pretty' }
+});
+
+const app = express();
+const port = process.env.PORT || 3000;
+
+// Capture raw body for signature verification (e.g. Stripe webhooks)
+app.use(
+  express.json({
+    verify: (req: any, res: Response, buf: Buffer) => {
+      req.rawBody = buf.toString('utf8');
+    }
+  })
+);
+
+app.use(express.urlencoded({ extended: true }));
+app.use(helmet());
+app.use(cors());
+
+// Health Check
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'UP', timestamp: new Date() });
+});
+
+// Register routers
+app.use('/v1', paymentRoutes);
+app.use('/webhooks', webhookRoutes);
+
+// Global Error Handler
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  logger.error(err, 'Global unhandled exception caught');
+  
+  if (err.message && err.message.includes('OptimisticLockError')) {
+    res.status(409).json({ error: 'Conflict: The record has been modified by another request. Please retry.' });
+    return;
+  }
+
+  res.status(500).json({
+    error: 'Internal Server Error',
+    message: process.env.NODE_ENV === 'production' ? 'An unexpected error occurred.' : err.message
+  });
+});
+
+// Startup sequence
+async function startServer() {
+  logger.info('Initializing Payment Orchestrator Platform...');
+
+  // 1. Connect to Kafka
+  await kafkaService.connect();
+
+  // 2. Start Transactional Outbox Publisher worker
+  outboxPublisher.start(5000);
+
+  // 3. Listen
+  app.listen(port, () => {
+    logger.info(`Server is running in ${process.env.NODE_ENV || 'development'} mode on port ${port}`);
+  });
+}
+
+startServer().catch((error) => {
+  logger.error(error, 'Startup sequence aborted due to error');
+  process.exit(1);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  logger.info('SIGTERM received. Shutting down gracefully...');
+  outboxPublisher.stop();
+  await kafkaService.disconnect();
+  process.exit(0);
+});
