@@ -7,114 +7,220 @@ This guide details instructions for setting up, running, testing, and developing
 ## 1. Prerequisites
 
 Before starting, ensure you have the following installed:
-- **Node.js**: Version 20 or higher (version 22 recommended).
-- **Docker Desktop**: Required to spin up backing services and run containerized environments.
-- **Git**: For version control.
+
+| Tool | Version | Purpose |
+|---|---|---|
+| **Docker Desktop** | Latest | Run all backing services and the full platform |
+| **Node.js** | 22+ (LTS) | Local TypeScript development only |
+| **Git** | Any | Version control |
+
+> **Tip**: Docker is the only hard requirement. You can run the entire platform with `docker compose up --build` without any local Node.js installation.
 
 ---
 
 ## 2. Directory Structure
 
-The repository is organized as a collection of independent applications:
-- [payment-platform-core](file:///c:/Mohit/Projects/Mohit/Payment%20Structure/payment-platform-core): Core transaction orchestrator (Express + Prisma, Port `3000`).
-- [payment-platform-portal](file:///c:/Mohit/Projects/Mohit/Payment%20Structure/payment-platform-portal): Next.js 15 merchant and developer UI dashboard (Port `3006`).
-- [payment-platform-sdk](file:///c:/Mohit/Projects/Mohit/Payment%20Structure/payment-platform-sdk): Shared types, DTOs, and abstract base classes.
-- [services/](file:///c:/Mohit/Projects/Mohit/Payment%20Structure/services): Asynchronous microservices.
-  - [audit-service](file:///c:/Mohit/Projects/Mohit/Payment%20Structure/services/audit-service) (Port `3003` health check)
-  - [invoice-service](file:///c:/Mohit/Projects/Mohit/Payment%20Structure/services/invoice-service) (Port `3001` health check)
-  - [notification-service](file:///c:/Mohit/Projects/Mohit/Payment%20Structure/services/notification-service) (Port `3002` health check)
-  - [reporting-service](file:///c:/Mohit/Projects/Mohit/Payment%20Structure/services/reporting-service) (Port `3005` analytics)
-  - [settlement-service](file:///c:/Mohit/Projects/Mohit/Payment%20Structure/services/settlement-service) (Port `3004` health check)
+The repository is a monorepo with a root-level shared library:
+
+| Path | Role | Port |
+|---|---|---|
+| `shared/` | Single source of truth — loggers, UUIDs, DTOs, validators, constants | — |
+| `payment-platform-core/` | Core ACID payment engine (Express + Prisma) | `3000` |
+| `payment-platform-portal/` | Next.js 15 merchant & developer dashboard | `3006` |
+| `payment-platform-sdk/` | Client SDK for Node.js integrations | — |
+| `services/invoice-service/` | PDF invoice generator | `3001` |
+| `services/notification-service/` | SMTP email & SMS dispatcher | `3002` |
+| `services/audit-service/` | Compliance audit logger | `3003` |
+| `services/settlement-service/` | Bank reconciliation engine | `3004` |
+| `services/reporting-service/` | Analytics aggregation service | `3005` |
 
 ---
 
 ## 3. Backing Services & Ports
 
-Backing services are run via Docker. They bind to the following default ports:
-- **PostgreSQL**: `5432`
-- **Redis**: `6379`
-- **Kafka**: `9092`
-- **MailHog (SMTP)**: `1025`
-- **MailHog (UI Dashboard)**: `8025`
-- **MinIO (S3)**: `9000` (API), `9001` (Console)
+All infrastructure is provided via Docker. Default ports:
+
+| Service | Port | Purpose |
+|---|---|---|
+| PostgreSQL | `5432` | Relational database |
+| Redis | `6379` | Idempotency locks, rate limiting |
+| Kafka | `9092` | Async event broker |
+| MailHog (SMTP) | `1025` | Email sending (dev only) |
+| MailHog (UI) | `8025` | Email inbox viewer |
+| MinIO (S3 API) | `9000` | Object storage for PDF invoices |
+| MinIO (Console) | `9001` | MinIO admin UI |
 
 ---
 
-## 4. Spin Up Environment via Docker (Zero-Install Execution)
+## 4. Option A — Full Platform via Docker (Recommended)
 
-The easiest way to run the entire system is using `docker compose`:
+The easiest way to run the entire platform with **zero local Node.js setup**:
 
 ```bash
-# Build and boot all 13 containers (backends, services, database, cache, broker, etc.)
+# 1. Copy environment variables
+cp .env.example .env
+
+# 2. Build and boot all containers
 docker compose up --build
 ```
 
-Once running, you can access:
-- **Merchant Portal**: [http://localhost:3006](http://localhost:3006)
-- **Core Engine API**: [http://localhost:3000](http://localhost:3000)
-- **Reporting Analytics Service**: [http://localhost:3005](http://localhost:3005)
-- **MailHog UI (Emails)**: [http://localhost:8025](http://localhost:8025)
-- **MinIO Console (S3 Files)**: [http://localhost:9001](http://localhost:9001)
+Once all containers are healthy, access the platform:
+
+| Interface | URL |
+|---|---|
+| Merchant Portal | http://localhost:3006 |
+| Core Engine API | http://localhost:3000 |
+| Reporting API | http://localhost:3005 |
+| MailHog (Email UI) | http://localhost:8025 |
+| MinIO (S3 Console) | http://localhost:9001 |
+
+To rebuild a specific service after code changes:
+```bash
+docker compose up --build payment-platform-core
+docker compose up --build reporting-service
+```
 
 ---
 
-## 5. Local Service Development (Without Docker Compose)
+## 5. Option B — Local Node.js Development
 
-To run a service locally for development/debugging:
+Use this option when actively developing and want hot-reload without rebuilding Docker images.
 
-### Step 5.1: Boot only Backing Services
+### Step 5.1 — Boot Only Backing Infrastructure
+
 ```bash
 docker compose up postgres redis kafka mailhog minio -d
 ```
 
-### Step 5.2: Configure Environment Variables
-Copy `.env.example` at the root or within specific folders to `.env` and adjust the variables (e.g., set hosts to `localhost` instead of Docker service names like `postgres` or `kafka`).
+### Step 5.2 — Configure Environment Variables
 
-### Step 5.3: Run Database Migrations & Seeds
-In `payment-platform-core`:
+Copy the root `.env.example` to `.env` and update host names from Docker service names (`postgres`, `kafka`) to `localhost` for local access:
+
 ```bash
-# Install dependencies
-npm install
+cp .env.example .env
+# Edit .env: change DATABASE_URL host from 'postgres' to 'localhost', etc.
+```
 
-# Generate Prisma Client
+### Step 5.3 — Install All Dependencies (One Command)
+
+From the repository root:
+```bash
+npm run install:all
+```
+
+This runs `npm ci` sequentially across all 8 packages:
+- `payment-platform-core`
+- `payment-platform-portal`
+- `payment-platform-sdk`
+- `services/audit-service`
+- `services/invoice-service`
+- `services/notification-service`
+- `services/reporting-service`
+- `services/settlement-service`
+
+> **Note**: Each service installs its own `node_modules`. The `shared/` library is consumed via relative path imports and has no separate `package.json` — it is copied alongside each service at build time.
+
+### Step 5.4 — Run Database Migrations & Seed Data (First Time Only)
+
+```bash
+cd payment-platform-core
+
+# Generate Prisma client
 npm run prisma:generate
 
-# Run schema migrations
+# Push schema to the database
 npm run prisma:migrate
+# (or for quick dev: npx prisma db push)
 
-# Seed DB with mock merchants, gateways, users, api keys, and transactions
+# Seed with demo merchants, gateways, API keys, and transactions
 npm run prisma:seed
 ```
 
-### Step 5.4: Generate Prisma Client in Supporting Services
-For each microservice under `services/`, run the prisma generator locally so that TypeScript can resolve the database models correctly:
+### Step 5.5 — Generate Prisma Client for Supporting Services
+
+Each microservice that queries the database needs its own generated Prisma client:
+
 ```bash
-cd services/audit-service
-npm install
-npm run prisma:generate
+cd services/audit-service && npm run prisma:generate && cd ../..
+cd services/invoice-service && npm run prisma:generate && cd ../..
+cd services/notification-service && npm run prisma:generate && cd ../..
+cd services/settlement-service && npm run prisma:generate && cd ../..
+cd services/reporting-service && npm run prisma:generate && cd ../..
 ```
 
-### Step 5.5: Run the Services in Dev Mode
+### Step 5.6 — Start Services in Dev Mode
+
 ```bash
-# Start Core
-cd payment-platform-core
-npm run dev
+# Start core engine + portal simultaneously (from repo root)
+npm run dev:all
 
-# Start Reporting Service
-cd services/reporting-service
-npm run dev
+# Or start individually:
+npm run dev:core      # Core API on :3000
+npm run dev:portal    # Next.js Portal on :3006
 
-# Start Portal
-cd payment-platform-portal
-npm run dev
+# Start microservices separately:
+cd services/reporting-service && npm run dev
+cd services/settlement-service && npm run dev
 ```
 
 ---
 
-## 6. Running Tests
+## 6. Root Workspace Scripts Reference
 
-To run Jest unit/integration tests:
+All commands are run from the **repository root**:
+
+| Command | Description |
+|---|---|
+| `npm run install:all` | `npm ci` in all 8 packages sequentially |
+| `npm run dev:core` | Start core engine (hot-reload) |
+| `npm run dev:portal` | Start Next.js portal (hot-reload) |
+| `npm run dev:all` | Start core + portal concurrently |
+| `npm run build:all` | TypeScript build for core, portal, and SDK |
+| `npm run test:core` | Run Jest tests for the core engine |
+
+---
+
+## 7. Shared Library Development
+
+The `shared/` directory is the single source of truth for all cross-cutting concerns. It is **not a separate npm package** — services import from it via relative paths:
+
+```typescript
+// From payment-platform-core (2 levels up):
+import { createLogger } from '../../shared/logger/create-logger';
+import { generateUuidV7 } from '../../shared/ids/generate-uuid-v7';
+
+// From services/* (4 levels up):
+import { createLogger } from '../../../../shared/logger/create-logger';
+import { generateUuidV7 } from '../../../../shared/ids/generate-uuid-v7';
+```
+
+When adding new shared code, place it in the appropriate `shared/` subdirectory. All consumers will automatically pick up the changes since they import by relative path.
+
+---
+
+## 8. Running Tests
+
 ```bash
+# Unit and integration tests for the core engine
 cd payment-platform-core
 npm run test
+
+# Or from root:
+npm run test:core
 ```
+
+---
+
+## 9. Environment Variables Reference
+
+See [`.env.example`](../.env.example) at the repository root for the full list of required environment variables. Key variables:
+
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `REDIS_URL` | Redis connection string |
+| `KAFKA_BROKERS` | Kafka broker addresses |
+| `ENCRYPTION_MASTER_KEY` | AES-256-GCM master key (base64) |
+| `KAFKA_ENABLED` | `"true"` to enable Kafka publishing |
+| `SMTP_HOST` / `SMTP_PORT` | Email server (MailHog in dev) |
+| `MINIO_ENDPOINT` | MinIO/S3 endpoint for invoice storage |
