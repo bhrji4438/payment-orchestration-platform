@@ -1,8 +1,6 @@
-import { PrismaClient } from '@prisma/client';
-import { kafkaService } from '../kafka/kafka.service.ts';
-import { logger } from '../../../../shared/logger/logger.ts';
-
-const prisma = new PrismaClient();
+import { kafkaService } from '../kafka/kafka.service';
+import { logger } from '@shared/logger/logger';
+import { prisma } from '../database/prisma';
 
 export class OutboxPublisher {
   private isRunning = false;
@@ -33,10 +31,15 @@ export class OutboxPublisher {
     logger.info('Transactional Outbox Publisher worker stopped');
   }
 
+  private isProcessing = false;
+
   /**
    * Fetches and processes PENDING outbox events in a batch
    */
   public async processPendingEvents(): Promise<void> {
+    if (this.isProcessing) return;
+    this.isProcessing = true;
+
     try {
       // Fetch oldest pending events
       const events = await prisma.outboxEvent.findMany({
@@ -50,41 +53,65 @@ export class OutboxPublisher {
       logger.debug({ count: events.length }, 'Processing pending outbox events');
 
       for (const event of events) {
-        // Attempt publishing to Kafka
-        const success = await kafkaService.publish(
-          event.topic,
-          event.key || event.id,
-          JSON.parse(event.payload)
-        );
-
-        if (success) {
-          await prisma.outboxEvent.update({
-            where: { id: event.id },
-            data: {
-              status: 'PUBLISHED',
-              attempts: event.attempts + 1
-            }
-          });
-        } else {
-          // If fail, increment attempts. If too many failures, mark as FAILED (DLQ)
-          const nextAttempts = event.attempts + 1;
-          const status = nextAttempts >= 5 ? 'FAILED' : 'PENDING';
-          
-          await prisma.outboxEvent.update({
-            where: { id: event.id },
-            data: {
-              status,
-              attempts: nextAttempts
-            }
-          });
-
-          if (status === 'FAILED') {
-            logger.error({ eventId: event.id, topic: event.topic }, 'Outbox event reached maximum retries. Moved to DLQ/Failed state.');
+        try {
+          let parsedPayload: any;
+          try {
+            parsedPayload = JSON.parse(event.payload);
+          } catch (parseErr: any) {
+            logger.error(
+              { eventId: event.id, error: parseErr.message },
+              'Failed to parse outbox event payload. Moving to FAILED state.'
+            );
+            await prisma.outboxEvent.update({
+              where: { id: event.id },
+              data: {
+                status: 'FAILED',
+                attempts: event.attempts + 1
+              }
+            });
+            continue;
           }
+
+          // Attempt publishing to Kafka
+          const success = await kafkaService.publish(
+            event.topic,
+            event.key || event.id,
+            parsedPayload
+          );
+
+          if (success) {
+            await prisma.outboxEvent.update({
+              where: { id: event.id },
+              data: {
+                status: 'PUBLISHED',
+                attempts: event.attempts + 1
+              }
+            });
+          } else {
+            // If fail, increment attempts. If too many failures, mark as FAILED (DLQ)
+            const nextAttempts = event.attempts + 1;
+            const status = nextAttempts >= 5 ? 'FAILED' : 'PENDING';
+            
+            await prisma.outboxEvent.update({
+              where: { id: event.id },
+              data: {
+                status,
+                attempts: nextAttempts
+              }
+            });
+
+            if (status === 'FAILED') {
+              logger.error({ eventId: event.id, topic: event.topic }, 'Outbox event reached maximum retries. Moved to DLQ/Failed state.');
+            }
+          }
+        } catch (eventError: any) {
+          logger.error({ eventId: event.id, error: eventError.message }, 'Unexpected error processing individual outbox event');
         }
       }
     } catch (error: any) {
       logger.error({ error: error.message }, 'Error during outbox processing cycle');
+    } finally {
+      this.isProcessing = false;
     }
   }
 }

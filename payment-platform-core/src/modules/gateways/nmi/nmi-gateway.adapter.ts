@@ -1,4 +1,4 @@
-import { AbstractPaymentGateway } from '../../../../../shared/contracts/abstract-payment-gateway.ts';
+import { AbstractPaymentGateway } from '@shared/contracts/abstract-payment-gateway';
 import {
   CreditCardSaleRequestDto,
   CreditCardAuthorizeRequestDto,
@@ -9,7 +9,7 @@ import {
   EcheckRefundRequestDto,
   EcheckVoidRequestDto,
   PaymentResponseDto
-} from '../../../../../shared/dto/gateway.dto.ts';
+} from '@shared/dto/gateway.dto';
 import axios from 'axios';
 
 export class NmiGatewayAdapter extends AbstractPaymentGateway {
@@ -288,5 +288,62 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
       responseMessage: 'Voided (Mock)',
       rawResponse: 'response=1&responsetext=SUCCESS'
     };
+  }
+
+  public async getTransaction(transactionReference: string): Promise<PaymentResponseDto> {
+    const securityKey = this.credentials.securityKey || 'mock_security_key';
+
+    if (securityKey === 'mock_security_key') {
+      return {
+        success: true,
+        transactionReference,
+        responseCode: '100',
+        responseMessage: 'Approved (Mock)',
+        rawResponse: 'response=1&responsetext=SUCCESS&transactionid=' + transactionReference
+      };
+    }
+
+    const params = new URLSearchParams();
+    params.append('security_key', securityKey);
+    params.append('report_type', 'transaction_detail');
+    params.append('transaction_id', transactionReference);
+
+    try {
+      const res = await axios.post('https://secure.networkmerchants.com/api/query.php', params.toString(), {
+        headers: this.buildHeaders({ 'Content-Type': 'application/x-www-form-urlencoded' })
+      });
+      const data = new URLSearchParams(res.data);
+      const success = data.get('response') === '1' || data.get('status') === 'success';
+
+      return {
+        success,
+        transactionReference: data.get('transactionid') || transactionReference,
+        responseCode: data.get('response') || undefined,
+        responseMessage: data.get('responsetext') || 'Query Complete',
+        rawResponse: res.data
+      };
+    } catch (error: any) {
+      throw this.mapGatewayError('getTransaction', error);
+    }
+  }
+
+  public override async verifyWebhook(params: {
+    headers: Record<string, string>;
+    rawBody: string;
+    webhookSecret: string;
+  }): Promise<boolean> {
+    try {
+      const signatureHeader = params.headers['x-nmi-signature'] || params.headers['X-Nmi-Signature'];
+      if (!signatureHeader) return false;
+
+      const { createHmac } = await import('crypto');
+      const expectedSignature = createHmac('sha256', params.webhookSecret)
+        .update(params.rawBody)
+        .digest('hex');
+
+      return signatureHeader === expectedSignature;
+    } catch {
+      return false;
+    }
   }
 }

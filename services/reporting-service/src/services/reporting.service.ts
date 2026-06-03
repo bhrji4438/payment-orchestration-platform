@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { createLogger } from '../../../../shared/logger/create-logger';
+import { createLogger } from '@shared/logger/create-logger';
 
 const prisma = new PrismaClient();
 const logger = createLogger('reporting-service');
@@ -14,54 +14,85 @@ export async function getAnalyticsReport(merchantId: string) {
     return null;
   }
 
-  // Fetch payments summary
-  const payments = await prisma.payment.findMany({
-    where: { merchantId, deletedAt: null }
+  // 1. Fetch aggregated payment metrics (avoid loading millions of records in memory)
+  const statusGroups = await prisma.payment.groupBy({
+    by: ['status'],
+    where: { merchantId, deletedAt: null },
+    _count: {
+      _all: true
+    },
+    _sum: {
+      amount: true
+    }
   });
 
-  const totalCount = payments.length;
-  const capturedPayments = payments.filter(p => p.status === 'CAPTURED');
-  const authorizedPayments = payments.filter(p => p.status === 'AUTHORIZED');
-  const failedPayments = payments.filter(p => p.status === 'FAILED');
-  const refundedPayments = payments.filter(p => p.status === 'REFUNDED');
+  let totalCount = 0;
+  let capturedCount = 0;
+  let authorizedCount = 0;
+  let failedCount = 0;
+  let refundedCount = 0;
+  let totalVolume = 0;
+  let totalRefunded = 0;
 
-  const totalVolume = capturedPayments.reduce((acc, p) => acc + Number(p.amount), 0);
-  const totalRefunded = refundedPayments.reduce((acc, p) => acc + Number(p.amount), 0);
+  for (const group of statusGroups) {
+    const count = group._count._all || 0;
+    const sum = Number(group._sum.amount || 0);
+    totalCount += count;
+
+    if (group.status === 'CAPTURED') {
+      capturedCount = count;
+      totalVolume = sum;
+    } else if (group.status === 'AUTHORIZED') {
+      authorizedCount = count;
+    } else if (group.status === 'FAILED') {
+      failedCount = count;
+    } else if (group.status === 'REFUNDED') {
+      refundedCount = count;
+      totalRefunded = sum;
+    }
+  }
 
   const successRate = totalCount > 0 
-    ? ((capturedPayments.length + authorizedPayments.length) / totalCount) * 100 
+    ? ((capturedCount + authorizedCount) / totalCount) * 100 
     : 100;
   const failureRate = totalCount > 0 
-    ? (failedPayments.length / totalCount) * 100 
+    ? (failedCount / totalCount) * 100 
     : 0;
 
-  // Fetch gateway health analytics (attempts count per config)
-  const attempts = await prisma.paymentAttempt.findMany({
+  // 2. Fetch configurations for provider mapping
+  const configs = await prisma.merchantGatewayConfiguration.findMany({
+    where: { merchantId },
+    include: { gatewayProvider: true }
+  });
+  const configMap = new Map(configs.map(c => [c.id, c.gatewayProvider.name]));
+
+  // 3. Fetch aggregated gateway health attempts count using groupBy
+  const attemptGroups = await prisma.paymentAttempt.groupBy({
+    by: ['gatewayConfigId', 'status'],
     where: {
-      payment: { merchantId }
+      payment: { merchantId, deletedAt: null }
     },
-    include: {
-      gatewayConfig: {
-        include: { gatewayProvider: true }
-      }
+    _count: {
+      _all: true
     }
   });
 
   const gatewayStats: Record<string, { total: number; success: number; failure: number }> = {};
-  for (const att of attempts) {
-    const provider = att.gatewayConfig.gatewayProvider.name;
+  for (const group of attemptGroups) {
+    const provider = configMap.get(group.gatewayConfigId) || 'Unknown';
     if (!gatewayStats[provider]) {
       gatewayStats[provider] = { total: 0, success: 0, failure: 0 };
     }
-    gatewayStats[provider].total++;
-    if (att.status === 'SUCCESS') {
-      gatewayStats[provider].success++;
+    const count = group._count._all || 0;
+    gatewayStats[provider].total += count;
+    if (group.status === 'SUCCESS') {
+      gatewayStats[provider].success += count;
     } else {
-      gatewayStats[provider].failure++;
+      gatewayStats[provider].failure += count;
     }
   }
 
-  // Fetch recent payments
+  // 4. Fetch recent payments (paged limit)
   const recentPayments = await prisma.payment.findMany({
     where: { merchantId, deletedAt: null },
     orderBy: { createdAt: 'desc' },
@@ -80,10 +111,10 @@ export async function getAnalyticsReport(merchantId: string) {
       successRate,
       failureRate,
       totalPayments: totalCount,
-      capturedCount: capturedPayments.length,
-      authorizedCount: authorizedPayments.length,
-      failedCount: failedPayments.length,
-      refundedCount: refundedPayments.length
+      capturedCount,
+      authorizedCount,
+      failedCount,
+      refundedCount
     },
     gateways: Object.keys(gatewayStats).map(key => ({
       gateway: key,

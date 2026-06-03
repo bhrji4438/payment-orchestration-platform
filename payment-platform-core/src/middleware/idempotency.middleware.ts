@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { idempotencyService } from '../services/idempotency.service.ts';
+import { idempotencyService } from '../services/idempotency.service';
 
 export function idempotencyMiddleware() {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {

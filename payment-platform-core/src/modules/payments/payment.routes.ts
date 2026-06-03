@@ -1,14 +1,15 @@
 import { Router, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { authMiddleware, AuthenticatedRequest } from '../auth/auth.middleware.ts';
-import { idempotencyMiddleware } from '../../middleware/idempotency.middleware.ts';
-import { validateBody } from '../../middleware/validation.middleware.ts';
+import { prisma } from '../../infrastructure/database/prisma';
+import { authMiddleware, AuthenticatedRequest } from '../auth/auth.middleware';
+import { idempotencyMiddleware } from '../../middleware/idempotency.middleware';
+import { validateBody } from '../../middleware/validation.middleware';
 import {
-  CreatePaymentSchema
-} from '../../../../shared/validators/payment.schemas.ts';
-import { paymentService } from './payment.service.ts';
-
-const prisma = new PrismaClient();
+  CreatePaymentSchema,
+  CapturePaymentSchema,
+  RefundPaymentSchema,
+  VoidPaymentSchema
+} from '@shared/validators/payment.schemas';
+import { paymentService } from './payment.service';
 const router = Router();
 
 router.use(authMiddleware);
@@ -40,12 +41,9 @@ router.post(
 router.post(
   '/captures',
   idempotencyMiddleware(),
+  validateBody(CapturePaymentSchema),
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const { paymentId, amount } = req.body;
-    if (!paymentId || !amount) {
-      res.status(400).json({ error: 'paymentId and amount are required.' });
-      return;
-    }
 
     try {
       const payment = await paymentService.capturePayment(paymentId, amount);
@@ -59,12 +57,9 @@ router.post(
 router.post(
   '/refunds',
   idempotencyMiddleware(),
+  validateBody(RefundPaymentSchema),
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const { paymentId, amount, reason } = req.body;
-    if (!paymentId || !amount) {
-      res.status(400).json({ error: 'paymentId and amount are required.' });
-      return;
-    }
 
     try {
       const payment = await paymentService.refundPayment(paymentId, amount, reason);
@@ -78,15 +73,24 @@ router.post(
 router.post(
   '/voids',
   idempotencyMiddleware(),
+  validateBody(VoidPaymentSchema),
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const { paymentId, reason } = req.body;
-    if (!paymentId) {
-      res.status(400).json({ error: 'paymentId is required.' });
-      return;
-    }
 
     try {
       const payment = await paymentService.voidPayment(paymentId, reason);
+      res.status(200).json(payment);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+);
+
+router.post(
+  '/payments/:id/sync',
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const payment = await paymentService.syncPaymentStatus(req.params.id);
       res.status(200).json(payment);
     } catch (error: any) {
       res.status(400).json({ error: error.message });

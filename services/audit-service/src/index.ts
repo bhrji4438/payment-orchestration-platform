@@ -1,6 +1,6 @@
 import http from 'http';
-import { startAuditConsumer } from './consumers/audit.consumer.ts';
-import { logger } from '../../../shared/logger/logger.ts';
+import { startAuditConsumer } from './consumers/audit.consumer';
+import { logger } from '@shared/logger/logger';
 
 const port = process.env.PORT || 3003;
 

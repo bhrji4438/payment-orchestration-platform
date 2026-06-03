@@ -17,7 +17,7 @@ const CardDetailsSchema = z.object({
   billingAddress: BillingAddressSchema.optional()
 });
 
-export const CreatePaymentSchema = z.object({
+const CreatePaymentBaseSchema = z.object({
   amount: z.number().positive('Amount must be a positive number'),
   currency: z.string().length(3, 'Currency must be a 3-character ISO code').default('USD'),
   gatewayConfigurationId: z.string().uuid('Gateway configuration ID must be a valid UUID').optional(),
@@ -25,20 +25,28 @@ export const CreatePaymentSchema = z.object({
   card: CardDetailsSchema.optional(),
   token: z.string().optional(),
   capture: z.boolean().default(true)
-}).refine(data => data.card || data.token, {
-  message: "Either card details or a payment token must be provided",
-  path: ["card"]
 });
 
+export const CreatePaymentSchema = CreatePaymentBaseSchema.refine(
+  (data) => !!(data.card || data.token),
+  {
+    message: "Either card details or a payment token must be provided",
+    path: ["card"]
+  }
+);
+
 export const CapturePaymentSchema = z.object({
+  paymentId: z.string().uuid('Payment ID must be a valid UUID'),
   amount: z.number().positive('Amount must be a positive number')
 });
 
 export const RefundPaymentSchema = z.object({
+  paymentId: z.string().uuid('Payment ID must be a valid UUID'),
   amount: z.number().positive('Amount must be a positive number'),
   reason: z.string().optional()
 });
 
 export const VoidPaymentSchema = z.object({
+  paymentId: z.string().uuid('Payment ID must be a valid UUID'),
   reason: z.string().optional()
 });

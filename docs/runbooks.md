@@ -1,6 +1,6 @@
 # Incident Response & Operations Runbooks
 
-This document details runbooks for common operational events, incidents, and maintenance tasks.
+This document details runbooks for common operational events, incidents, system failures, and maintenance tasks.
 
 ---
 
@@ -12,7 +12,6 @@ This document details runbooks for common operational events, incidents, and mai
 - Circuit breaker tripped to `OPEN` state in application logs.
 
 ### Diagnostic Steps
-
 1. Query the database to check recent failure messages:
    ```sql
    SELECT "responseCode", "responseMessage", "gatewayConfigId", "createdAt"
@@ -21,7 +20,6 @@ This document details runbooks for common operational events, incidents, and mai
    ORDER BY "createdAt" DESC
    LIMIT 10;
    ```
-
 2. Check circuit breaker state in Pino structured logs (search by service name):
    ```bash
    docker compose logs payment-platform-core | grep "circuit"
@@ -58,60 +56,26 @@ docker compose logs payment-platform-core | grep -i "breaker\|OPEN\|HALF_OPEN\|C
 ## Runbook 3: Rotating Gateway Credentials
 
 ### Context
-Gateway credentials (Stripe API keys, Cardpointe passwords, NMI security keys) must be rotated periodically or immediately if compromised.
+Gateway credentials (API keys, passwords) must be rotated periodically or immediately if compromised.
 
 ### Resolution Steps
-
 1. Generate new credentials in the gateway's merchant portal.
-
-2. Encrypt the new credentials using the platform's AES-256-GCM utility from `shared/crypto/`:
+2. Encrypt the new credentials using the platform's AES-256-GCM utility from `@shared/crypto/credential-encryption`:
    ```typescript
-   import { credentialEncryptionService } from '../../shared/crypto/credential-encryption';
+   import { credentialEncryptionService } from '@shared/crypto/credential-encryption';
    const encrypted = credentialEncryptionService.encrypt(JSON.stringify(newCredentials));
    ```
-
 3. Update the `encryptedCredentials` field in the `merchant_gateway_configurations` table:
    ```sql
    UPDATE merchant_gateway_configurations
    SET "encryptedCredentials" = '<new_encrypted_value>', "updatedAt" = NOW()
    WHERE id = '<config_id>';
    ```
-
 4. Test the connection from the Web Portal → **Gateway Routing** → **Ping Health**.
 
 ---
 
-## Runbook 4: Kafka Consumer Lag / Delayed Events
-
-### Alert Trigger
-- Invoice, Notification, or Audit service consumer groups are lagging behind the Kafka topic offset.
-- Customers not receiving emails; invoices not generated.
-
-### Diagnostic Steps
-```bash
-# Check consumer group lag
-docker exec -it payment_orchestrator_broker \
-  kafka-consumer-groups.sh --bootstrap-server kafka:29092 \
-  --describe --all-groups
-```
-
-### Resolution Steps
-1. Check service health:
-   ```bash
-   docker compose ps
-   curl http://localhost:3001/health  # invoice-service
-   curl http://localhost:3002/health  # notification-service
-   curl http://localhost:3003/health  # audit-service
-   ```
-2. If a service is down, restart it:
-   ```bash
-   docker compose restart invoice-service
-   ```
-3. Once restarted, KafkaJS consumer groups automatically resume from the last committed offset. Events are **not lost** due to the transactional outbox pattern.
-
----
-
-## Runbook 5: Settlement Discrepancy Detected
+## Runbook 4: Settlement Discrepancy Detected
 
 ### Alert Trigger
 - `settlement.discrepancy` Kafka event emitted.
@@ -139,7 +103,7 @@ WHERE si."settlementId" = '<settlement_id>'
 
 ---
 
-## Runbook 6: Database Migration Failures
+## Runbook 5: Database Migration Failures
 
 ### Context
 Prisma migration failures during deployment can leave the schema in an inconsistent state.
@@ -155,27 +119,158 @@ Prisma migration failures during deployment can leave the schema in an inconsist
    npx prisma migrate deploy
    ```
 3. **Never** run `prisma db push` in production — it bypasses migration history and can cause irreversible schema drift.
-4. If rollback is needed, restore from the latest RDS snapshot and re-apply migrations up to the last known-good version.
+4. If rollback is needed, restore from the latest RDS snapshot and re-apply migrations.
 
 ---
 
-## Runbook 7: Shared Library Import Errors
+## Runbook 6: Shared Library Import Errors
 
 ### Context
-After adding new code to `shared/`, TypeScript may fail to resolve imports in services if relative paths are incorrect.
+After adding new code to `shared/`, TypeScript may fail to resolve imports in services if path mapping aliases are configured incorrectly.
 
 ### Resolution Steps
-1. Verify the import depth is correct (count directory levels from the service to `shared/`):
-   - From `payment-platform-core/src/*`: `../../shared/`
-   - From `services/*/src/*`: `../../../../shared/`
-2. Ensure the `tsconfig.json` in the service has `"moduleResolution": "bundler"` or `"node"`.
-3. In Docker builds, verify the `Dockerfile` includes:
-   ```dockerfile
-   COPY shared/ ./shared        # in builder stage
-   COPY --from=builder /app/shared ./shared   # in runner stage
+1. Verify the `@shared/*` alias is mapped correctly in `tsconfig.json`:
+   ```json
+   "@shared/*": ["../../shared/*"]
    ```
-4. Run the TypeScript compiler to surface all import errors:
+2. In Docker builds, verify the `Dockerfile` includes `COPY shared/ ./shared` in both builder and runner stages.
+3. Run the TypeScript compiler to surface all import errors:
    ```bash
-   cd payment-platform-core && npx tsc --noEmit
-   cd services/settlement-service && npx tsc --noEmit
+   npx tsc --noEmit
    ```
+
+---
+
+## Runbook 7: Kafka Connection Drops & Consumer Lag
+
+### Symptoms
+- Events are not processing downstream; notification emails and invoices are delayed.
+- Consumer offset lag values continue to increase.
+
+### Diagnostic Steps
+1. Query consumer group descriptions inside the broker:
+   ```bash
+   docker exec -it payment_orchestrator_broker \
+     kafka-consumer-groups.sh --bootstrap-server kafka:29092 \
+     --describe --all-groups
+   ```
+2. Check logs for KafkaJS warning/error messages:
+   ```bash
+   docker compose logs invoice-service | grep -i "kafka\|connection\|disconnect"
+   ```
+
+### Resolution Steps
+1. **Network Disruption**: If brokers are offline, verify MSK health. Restart local containers:
+   ```bash
+   docker compose restart kafka
+   ```
+2. **Backlog Mitigation**: If consumer group lag is due to a surge in traffic, scale consumer instances horizontally (Fargate tasks/Kubernetes replicas) to process messages in parallel.
+
+---
+
+## Runbook 8: Redis Failure & Cache Key Exhaustion
+
+### Symptoms
+- API write requests return `500 Internal Server Error` due to locking errors.
+- Logs output `Command OOM not allowed` or Connection timeouts.
+
+### Diagnostic Steps
+1. Ping Redis:
+   ```bash
+   docker exec -it payment_orchestrator_redis redis-cli ping
+   # Expected response: PONG
+   ```
+2. Check memory usage:
+   ```bash
+   docker exec -it payment_orchestrator_redis redis-cli info memory
+   ```
+
+### Resolution Steps
+1. **Locked Idempotency Key**: Clear a stuck idempotency lock manually:
+   ```bash
+   docker exec -it payment_orchestrator_redis redis-cli del idemp:lock:<merchantId>:<key>
+   ```
+2. **Eviction Settings**: If Redis is out of memory (OOM), check the eviction policy. Force eviction of old keys using Least Recently Used (LRU) policy:
+   ```bash
+   docker exec -it payment_orchestrator_redis redis-cli config set maxmemory-policy allkeys-lru
+   ```
+3. **Connectivity Drops**: Restart local Redis container:
+   ```bash
+   docker compose restart redis
+   ```
+
+---
+
+## Runbook 9: Microservice Startup Failures
+
+### Symptoms
+- Containers crash immediately upon booting, reporting loop exit code `1`.
+
+### Diagnostics & Resolution
+1. **Missing Environment Variables**:
+   - Check container logs: `docker compose logs invoice-service`.
+   - Verify that all environment properties defined in `.env.example` exist in the service `.env` file.
+2. **Un-generated Prisma Client**:
+   - If Prisma client files are missing, run compilation generation steps:
+     ```bash
+     npx prisma generate
+     ```
+3. **TypeScript Build Failures**:
+   - Run compilation manually to verify that typescript compilation finishes cleanly:
+     ```bash
+     npm run build
+     ```
+
+---
+
+## Runbook 10: Email Delivery & Mock MailHog Failures
+
+### Symptoms
+- Notifications status is `FAILED` in the database.
+- Customers report they are not receiving emails.
+
+### Diagnostics & Resolution
+1. **MailHog Down**: Verify that MailHog UI is accessible at `http://localhost:8025`. If not, restart MailHog:
+   ```bash
+   docker compose restart mailhog
+   ```
+2. **SMTP Configuration Error**: Check `SMTP_HOST` and `SMTP_PORT` configuration parameters. For local dev, they must point to host `mailhog` on port `1025`.
+3. **Invalid Email Schema**: Inspect the `notifications` table to see the failure log reasons:
+   ```sql
+   SELECT recipient, payload, status FROM notifications WHERE status = 'FAILED' LIMIT 5;
+   ```
+
+---
+
+## Runbook 11: MinIO S3 Object Storage Failures
+
+### Symptoms
+- Invoice generation fails when uploading PDFs to S3 buckets.
+- PDF links in the portal return `404` or permission errors.
+
+### Diagnostics & Resolution
+1. **Bucket Not Initialized**: Verify the default bucket exists. Access the console at `http://localhost:9001` (default credentials: `minioadmin` / `minioadmin`). Create the target bucket if missing.
+2. **Access Policy Mismatch**: Ensure the bucket policy is set to `Public` or `Read-Only` for read endpoints, allowing browser downloads.
+3. **Invalid Client Credentials**: Check env parameters: `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, and `MINIO_SECRET_KEY`.
+
+---
+
+## Runbook 12: High CPU / Memory Spikes
+
+### Symptoms
+- Containers trigger auto-restart loops or drop requests.
+- Node process memory footprint exceeds allocation limits.
+
+### Diagnostics & Resolution
+1. **CPU Profiling**:
+   - Run `top` or check container resource usage:
+     ```bash
+     docker stats
+     ```
+   - Slow database queries are the primary cause of CPU spikes. Check PostgreSQL slow query logs:
+     ```sql
+     SELECT query, calls, total_exec_time FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 5;
+     ```
+2. **Memory Leaks**:
+   - Check logs for `JS heap out of memory` errors.
+   - Profile memory leaks using standard Node inspector flags: `--inspect`. Ensure that Express middleware objects and event listener arrays are properly garbage-collected and not accumulating requests.

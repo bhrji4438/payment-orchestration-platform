@@ -1,6 +1,6 @@
 # Shared Library Reference (`shared/`)
 
-The `shared/` directory at the repository root is the **single source of truth** for all cross-cutting concerns in the monorepo. It is consumed by `payment-platform-core` and all five microservices via relative TypeScript imports.
+The `shared/` directory at the repository root is the **single source of truth** for all cross-cutting concerns in the monorepo. It is consumed by `payment-platform-core` and all five microservices.
 
 > **Rule**: Every reusable utility, helper, constant, DTO, validator, event contract, logger, and UUID generator must exist in exactly one location — `shared/`. No service may define its own duplicate.
 
@@ -17,21 +17,20 @@ shared/
 │   └── event.constants.ts         ← EventType enum
 │
 ├── contracts/
-│   └── abstract-payment-gateway.ts  ← AbstractPaymentGateway base class
+│   └── abstract-payment-gateway.ts  ← AbstractPaymentGateway base contract class
 │
 ├── crypto/
-│   └── credential-encryption.ts    ← AES-256-GCM encrypt/decrypt for gateway creds
+│   └── credential-encryption.ts    ← AES-256-GCM encrypt/decrypt for gateway credentials
 │
 ├── dates/
-│   └── date-utils.ts               ← toISOString(), formatDate(), toUTC() helpers
+│   └── date-utils.ts               ← ISO formatting, timezone helpers
 │
 ├── dto/
 │   ├── gateway.dto.ts              ← CreditCardSaleRequestDto, PaymentResponseDto, etc.
 │   └── common.dto.ts               ← PaginationDto, ApiResponseDto, etc.
 │
 ├── errors/
-│   └── errors.ts                   ← AppError, ValidationError, NotFoundError,
-│                                     ConflictError, UnauthorizedError
+│   └── errors.ts                   ← AppError, ValidationError, NotFoundError, etc.
 │
 ├── events/
 │   └── events.ts                   ← Typed Kafka event payload definitions
@@ -52,56 +51,41 @@ shared/
 ## Module Reference
 
 ### `shared/ids/generate-uuid-v7.ts`
-
 Generates time-sortable UUIDv7 identifiers used for all entity IDs across the platform.
-
 ```typescript
-import { generateUuidV7 } from '../../../../shared/ids/generate-uuid-v7';
+import { generateUuidV7 } from '@shared/ids/generate-uuid-v7';
 
-const paymentId = generateUuidV7();
-// e.g., "01917c4a-3b2f-7000-8000-a1b2c3d4e5f6"
+const paymentId = generateUuidV7(); // "01917c4a-3b2f-7000-8000-a1b2c3d4e5f6"
 ```
 
 ---
 
 ### `shared/logger/create-logger.ts`
-
 Creates a named [Pino](https://github.com/pinojs/pino) logger instance with `pino-pretty` transport for development.
-
 ```typescript
-import { createLogger } from '../../../../shared/logger/create-logger';
+import { createLogger } from '@shared/logger/create-logger';
 
 const logger = createLogger('settlement-service');
-
 logger.info({ settlementId }, 'Settlement reconciliation complete');
-logger.error({ error: err.message }, 'Reconciliation failed');
-logger.warn({ paymentId, variance }, 'Variance detected');
 ```
-
-Always pass the **service name** as the argument so log entries are identifiable in aggregated log streams (Grafana Loki, CloudWatch).
+Always pass the **service name** as the argument so log entries are easily filtered in centralized logs (Loki, CloudWatch).
 
 ---
 
 ### `shared/errors/errors.ts`
-
 A typed error hierarchy for consistent HTTP error responses and logging.
-
 ```typescript
-import { AppError, ValidationError, NotFoundError, ConflictError, UnauthorizedError } from '../../../../shared/errors/errors';
+import { NotFoundError, ValidationError } from '@shared/errors/errors';
 
-// Throw typed errors in service layer:
 throw new NotFoundError('Payment not found');
-throw new ConflictError('Idempotency key already used');
-throw new ValidationError('Amount must be greater than zero');
-throw new UnauthorizedError('Invalid API key');
 ```
 
 ---
 
 ### `shared/constants/payment.constants.ts`
-
+Standardized transaction status enums:
 ```typescript
-import { PaymentStatus, RefundStatus } from '../../../../shared/constants/payment.constants';
+import { PaymentStatus } from '@shared/constants/payment.constants';
 
 if (payment.status === PaymentStatus.CAPTURED) { ... }
 ```
@@ -109,9 +93,9 @@ if (payment.status === PaymentStatus.CAPTURED) { ... }
 ---
 
 ### `shared/constants/kafka.constants.ts`
-
+Unified topic name constants:
 ```typescript
-import { KafkaTopic } from '../../../../shared/constants/kafka.constants';
+import { KafkaTopic } from '@shared/constants/kafka.constants';
 
 await kafkaService.publish(KafkaTopic.PAYMENT_CAPTURED, paymentId, payload);
 ```
@@ -119,118 +103,103 @@ await kafkaService.publish(KafkaTopic.PAYMENT_CAPTURED, paymentId, payload);
 ---
 
 ### `shared/dto/gateway.dto.ts`
-
 Typed request/response shapes for all gateway operations:
-
 ```typescript
-import { CreditCardSaleRequestDto, PaymentResponseDto } from '../../../../shared/dto/gateway.dto';
-
-// All gateway adapters receive and return these standardized DTOs
-abstract creditCardSale(req: CreditCardSaleRequestDto): Promise<PaymentResponseDto>;
+import { CreditCardSaleRequestDto, PaymentResponseDto } from '@shared/dto/gateway.dto';
 ```
 
 ---
 
 ### `shared/validators/payment.schemas.ts`
-
 Zod schemas for validating incoming API payloads:
-
 ```typescript
-import { createPaymentSchema } from '../../../../shared/validators/payment.schemas';
+import { createPaymentSchema } from '@shared/validators/payment.schemas';
 
 const result = createPaymentSchema.safeParse(req.body);
-if (!result.success) throw new ValidationError(result.error.message);
 ```
 
 ---
 
 ### `shared/events/events.ts`
-
 Typed Kafka event payloads ensuring all producers and consumers agree on the contract:
-
 ```typescript
-import { PaymentCapturedEvent } from '../../../../shared/events/events';
-
-const event: PaymentCapturedEvent = {
-  paymentId,
-  merchantId,
-  amount,
-  currency,
-  gatewayToken,
-  capturedAt: new Date().toISOString()
-};
+import { PaymentCapturedEvent } from '@shared/events/events';
 ```
 
 ---
 
 ### `shared/crypto/credential-encryption.ts`
-
-AES-256-GCM encryption for sensitive gateway API credentials stored in the database:
-
+AES-256-GCM encryption for sensitive gateway credentials stored in the database:
 ```typescript
-import { credentialEncryptionService } from '../../../../shared/crypto/credential-encryption';
+import { credentialEncryptionService } from '@shared/crypto/credential-encryption';
 
-// Encrypt before storing:
 const encrypted = credentialEncryptionService.encrypt(JSON.stringify(credentials));
-
-// Decrypt before use:
-const credentials = JSON.parse(credentialEncryptionService.decrypt(encrypted));
 ```
-
-Requires `ENCRYPTION_MASTER_KEY` environment variable (base64-encoded 32-byte key).
+Requires the `ENCRYPTION_MASTER_KEY` environment variable.
 
 ---
 
 ### `shared/contracts/abstract-payment-gateway.ts`
-
-The base class all gateway adapters **must** extend. Enforces a common interface across Stripe, Authorize.Net, NMI, and Cardpointe:
-
+The base class all gateway adapters **must** extend. Enforces a common interface:
 ```typescript
-import { AbstractPaymentGateway } from '../../../../shared/contracts/abstract-payment-gateway';
+import { AbstractPaymentGateway } from '@shared/contracts/abstract-payment-gateway';
 
-export class StripeGatewayAdapter extends AbstractPaymentGateway {
-  async creditCardSale(req: CreditCardSaleRequestDto): Promise<PaymentResponseDto> { ... }
-  async creditCardAuthorize(req: CreditCardSaleRequestDto): Promise<PaymentResponseDto> { ... }
-  async creditCardCapture(req: CaptureRequestDto): Promise<PaymentResponseDto> { ... }
-  async creditCardRefund(req: RefundRequestDto): Promise<PaymentResponseDto> { ... }
-  async creditCardVoid(req: VoidRequestDto): Promise<PaymentResponseDto> { ... }
-}
+export class StripeGatewayAdapter extends AbstractPaymentGateway { ... }
 ```
 
 ---
 
-## Import Path Reference
+## Path Mapping Import Rules
 
-| Importing from | Path prefix to shared/ |
-|---|---|
-| `payment-platform-core/src/**` | `../../shared/` |
-| `services/*/src/**` | `../../../../shared/` |
-| `payment-platform-portal/app/**` | ⛔ Not applicable (browser-only) |
-| `payment-platform-sdk/**` | ⛔ Not applicable (standalone SDK) |
+To avoid complex relative path depths (e.g., `../../../../shared/logger`), both the core monolith and the services configure **tsconfig path mappings**.
+
+### Configuration (tsconfig.json)
+```json
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../shared/*"] // resolves to shared directory
+    }
+  }
+}
+```
+
+### Import Usage Guidelines
+Always use the `@shared/` path alias instead of relative imports:
+
+- **Correct**:
+  ```typescript
+  import { createLogger } from '@shared/logger/create-logger';
+  ```
+- **Incorrect**:
+  ```typescript
+  import { createLogger } from '../../../../shared/logger/create-logger';
+  ```
 
 ---
 
 ## Docker Build — How `shared/` Reaches Each Container
 
-Since `shared/` is not an npm package, it must be explicitly copied into each service's Docker image. All service Dockerfiles handle this with:
+Since `shared/` is not published to an npm registry, it is copied directly into each service container during the build stage. The build context in `docker-compose.yml` is the monorepo root:
 
 ```dockerfile
-# Builder stage — needed for TypeScript compilation
+# Stage 1: Build compiles with access to shared/
 COPY shared/ ./shared
 
-# Runner stage — needed for Node.js runtime (relative path imports resolve here)
+# Stage 2: Runtime keeps files for relative imports
 COPY --from=builder /app/shared ./shared
 ```
-
-The build context in `docker-compose.yml` is the **repository root** (`context: .`), which makes `COPY shared/` valid in all Dockerfiles.
 
 ---
 
 ## Adding New Shared Code
 
-1. Identify the correct subdirectory (`constants/`, `dto/`, `validators/`, etc.)
-2. Create or update the file in `shared/`
-3. Export the new symbol from the file
-4. Import it in all consumers via the correct relative path
-5. Verify TypeScript compilation: `npx tsc --noEmit` in each affected package
-6. Update this document if adding a new module
+1. Identify the target module folder in `shared/`.
+2. Create or edit files inside that folder, exporting all symbols cleanly.
+3. Import the shared module in consumer code using the `@shared/*` alias.
+4. Verify compiling health:
+   ```bash
+   npx tsc --noEmit
+   ```
+5. Update this documentation file if adding a brand new module.

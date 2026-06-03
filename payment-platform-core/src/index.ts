@@ -3,10 +3,10 @@ import helmet from 'helmet';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import pino from 'pino';
-import paymentRoutes from './modules/payments/payment.routes.ts';
-import webhookRoutes from './modules/webhooks/webhook.routes.ts';
-import { outboxPublisher } from './infrastructure/outbox/outbox-publisher.ts';
-import { kafkaService } from './infrastructure/kafka/kafka.service.ts';
+import paymentRoutes from './modules/payments/payment.routes';
+import webhookRoutes from './modules/webhooks/webhook.routes';
+import { outboxPublisher } from './infrastructure/outbox/outbox-publisher';
+import { kafkaService } from './infrastructure/kafka/kafka.service';
 
 dotenv.config();
 

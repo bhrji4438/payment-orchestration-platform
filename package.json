@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "install:all": "cd payment-platform-core && npm ci && cd ../payment-platform-portal && npm ci && cd ../payment-platform-sdk && npm ci && cd ../services/audit-service && npm ci && cd ../invoice-service && npm ci && cd ../notification-service && npm ci && cd ../reporting-service && npm ci && cd ../settlement-service && npm ci",
+    "bootstrap:env": "node -e \"const fs = require('fs'); ['.', 'payment-platform-core', 'payment-platform-portal', 'payment-platform-sdk', 'services/audit-service', 'services/invoice-service', 'services/notification-service', 'services/reporting-service', 'services/settlement-service'].forEach(p => { const target = p === '.' ? '.env' : `${p}/.env`; fs.copyFileSync('.env.example', target); console.log(`Copied .env.example to ${target}`); })\"",
+    "install:all": "cd payment-platform-core && npm i && cd ../payment-platform-portal && npm i && cd ../payment-platform-sdk && npm i && cd ../services/audit-service && npm i && cd ../invoice-service && npm i && cd ../notification-service && npm i && cd ../reporting-service && npm i && cd ../settlement-service && npm i",
     "dev:core": "cd payment-platform-core && npm run dev",
     "dev:portal": "cd payment-platform-portal && npm run dev",
     "dev:all": "concurrently \"cd payment-platform-core && npm run dev\" \"cd payment-platform-portal && npm run dev\"",

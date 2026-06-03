@@ -70,7 +70,8 @@ export default function DashboardPortal() {
 
   // Load actual data if server is running
   useEffect(() => {
-    fetch('http://localhost:3002/analytics/a0000000-0000-0000-0000-00000000000a')
+    const reportingApiUrl = process.env.NEXT_PUBLIC_REPORTING_API_URL || 'http://localhost:3005';
+    fetch(`${reportingApiUrl}/analytics/a0000000-0000-0000-0000-00000000000a`)
       .then(res => res.json())
       .then(data => {
         if (data && data.summary) {
@@ -142,7 +143,8 @@ export default function DashboardPortal() {
       const month = expParts[0] || '12';
       const year = expParts[1] || '2028';
 
-      const response = await fetch('http://localhost:3001/v1/payments', {
+      const coreApiUrl = process.env.NEXT_PUBLIC_CORE_API_URL || 'http://localhost:3000';
+      const response = await fetch(`${coreApiUrl}/v1/payments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -116,16 +116,19 @@ Once running:
 # 1. Start only backing infrastructure
 docker compose up postgres redis kafka mailhog minio -d
 
-# 2. Install all workspace dependencies
+# 2. Copy environment templates to root and all service folders
+npm run bootstrap:env
+
+# 3. Install all workspace dependencies
 npm run install:all
 
-# 3. Run DB migrations & seed data (run once)
+# 4. Run DB migrations & seed data (run once)
 cd payment-platform-core
 npx prisma db push
 npm run prisma:seed
 cd ..
 
-# 4. Start the core engine and portal
+# 5. Start the core engine and portal
 npm run dev:all
 ```
 
@@ -146,9 +149,24 @@ All scripts are defined in the [root package.json](./package.json) and can be ru
 
 ---
 
-## 5. Key Architecture Rules
+## 5. Documentation Directory & Architecture Rules
 
 > **Every shared utility must live in exactly one location — `shared/`.**
 > Business services must never directly call Stripe, NMI, Authorize.Net, or Cardpointe adapters. All gateway operations go through the Gateway Abstraction Layer.
 
-See [docs/architecture.md](./docs/architecture.md) and [docs/design_patterns.md](./docs/design_patterns.md) for full details.
+For detailed guidelines and technical specifications, refer to the following documents:
+
+### Core Architecture & Design
+- **[System Architecture](./docs/architecture.md)**: Modular Monolith + Event-Driven Services, C4 models, transactional boundaries, and outbox publisher lifecycle.
+- **[Design Patterns](./docs/design_patterns.md)**: Implementation reference for Adapter, Strategy, Factory, Outbox, Saga, Circuit Breaker, and Repository/Unit of Work patterns.
+- **[Shared Library Guide](./docs/shared_library.md)**: Usage guide for the single source of truth (`shared/`) modules, constants, validators, and error hierarchy.
+- **[Database Schema](./docs/database_schema.md)**: Schema topology, indexing strategy, and soft delete patterns using UUIDv7.
+- **[API Specification](./docs/api_specification.md)**: REST endpoints, authentication (Developer keys/JWTs), Zod request/response validation, and webhook HMAC signature verification.
+
+### Development & Operations
+- **[Development & Coding Rules](./docs/development/development-rules.md)**: (NEW) Coding standards (ES6+/ES2023, strict TypeScript), project structure, testing requirements, security best practices, and code review Definition of Done.
+- **[Redis Architecture & Cache Guide](./docs/redis-guide.md)**: (NEW) Idempotency locking strategies, rate limiting rules, local setup, CLI usage, and TTL checks.
+- **[Kafka & Event-Driven Guide](./docs/kafka-guide.md)**: (NEW) Event schemas, topic conventions, DLQ processing, consumer group lag checks, event replay procedures, and local debug scripts.
+- **[Local Development Guide](./docs/local_development.md)**: Booting options, credential setups, merchant onboarding workflow, and adding a new payment gateway adapter step-by-step.
+- **[Production Deployment & Infrastructure Guide](./docs/deployment.md)**: Multi-stage Docker configurations, AWS ECS/Fargate deployment topologies, Kubernetes manifests, and CI/CD GitOps pipelines.
+- **[Incident Response & Operations Runbooks](./docs/runbooks.md)**: Disaster recovery procedures, troubleshooting guides (Kafka lag, Redis down, database locks, MinIO/MailHog issues).

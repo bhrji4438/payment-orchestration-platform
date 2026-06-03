@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
-import { generateUuidV7 } from '../../../../shared/ids/generate-uuid-v7.ts';
-import { logger } from '../../../../shared/logger/logger.ts';
+import { generateUuidV7 } from '@shared/ids/generate-uuid-v7';
+import { logger } from '@shared/logger/logger';
 
 const prisma = new PrismaClient();
 

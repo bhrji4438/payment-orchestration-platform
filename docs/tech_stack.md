@@ -21,12 +21,7 @@ The root-level `shared/` directory is the **single source of truth** for all cro
 | Credential Crypto | `shared/crypto/credential-encryption.ts` | AES-256-GCM envelope encryption/decryption for gateway credentials |
 | Gateway Contract | `shared/contracts/abstract-payment-gateway.ts` | `AbstractPaymentGateway` base class — all adapters must extend this |
 
-**Import pattern** (relative path, no npm install required):
-```typescript
-import { createLogger } from '../../../../shared/logger/create-logger';
-import { generateUuidV7 } from '../../../../shared/ids/generate-uuid-v7';
-import { AbstractPaymentGateway } from '../../../../shared/contracts/abstract-payment-gateway';
-```
+For rules regarding shared code development, see the **[Development & Coding Rules](./development/development-rules.md)** guide.
 
 ---
 
@@ -85,12 +80,10 @@ A merchant dashboard and developer portal for log analysis, gateway configuratio
 | Concern | Library |
 |---|---|
 | Framework | Next.js 15 (App Router) |
-| Language | TypeScript |
+| Language | TypeScript (Strict mode) |
 | Styling | Tailwind CSS |
 | Iconography | Lucide React |
 | Data Fetching | Native `fetch` API (no backend calls in browser-side components) |
-
-> The portal is a **browser-only** React application. Server-side Node.js libraries like Pino are not used here.
 
 ---
 
@@ -115,8 +108,8 @@ Backing components and IaC manifests for cloud deployment.
 | Component | Technology | Notes |
 |---|---|---|
 | Relational DB | PostgreSQL 16 | Multi-AZ in production (AWS RDS) |
-| Cache | Redis 7 | Idempotency key TTL locks |
-| Messaging | Confluent Kafka + Zookeeper | AWS MSK in production |
+| Cache | Redis 7 | Idempotency key TTL locks. See **[Redis Architecture & Cache Guide](./redis-guide.md)** |
+| Messaging | Confluent Kafka | AWS MSK in production. See **[Kafka & Event-Driven Guide](./kafka-guide.md)** |
 | Email (Dev) | MailHog | SMTP sink for local email testing |
 | Object Storage (Dev) | MinIO | S3-compatible local bucket |
 | IaC | Terraform | AWS ECS Fargate, MSK, RDS, S3, KMS |

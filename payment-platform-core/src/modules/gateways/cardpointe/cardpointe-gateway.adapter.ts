@@ -1,4 +1,4 @@
-import { AbstractPaymentGateway } from '../../../../../shared/contracts/abstract-payment-gateway.ts';
+import { AbstractPaymentGateway } from '@shared/contracts/abstract-payment-gateway';
 import {
   CreditCardSaleRequestDto,
   CreditCardAuthorizeRequestDto,
@@ -9,10 +9,10 @@ import {
   EcheckRefundRequestDto,
   EcheckVoidRequestDto,
   PaymentResponseDto
-} from '../../../../../shared/dto/gateway.dto.ts';
+} from '@shared/dto/gateway.dto';
 import axios from 'axios';
 
-export class CustomGatewayAdapter extends AbstractPaymentGateway {
+export class CardpointeGatewayAdapter extends AbstractPaymentGateway {
   private getBaseUrl(): string {
     const siteName = this.credentials.siteName || 'fts';
     const postFixUrl = this.environment.toUpperCase() === 'PRODUCTION'
@@ -390,5 +390,63 @@ export class CustomGatewayAdapter extends AbstractPaymentGateway {
       throw this.mapGatewayError('echeckVoid', error);
     }
   }
+
+  public async getTransaction(transactionReference: string): Promise<PaymentResponseDto> {
+    const baseUrl = this.getBaseUrl();
+    const merchid = this.credentials.merchantid || 'mock_merchant_id';
+
+    if (merchid === 'mock_merchant_id') {
+      return {
+        success: true,
+        transactionReference,
+        responseCode: '200',
+        responseMessage: 'Settled (Mock)',
+        rawResponse: JSON.stringify({ retref: transactionReference, respstat: 'A' })
+      };
+    }
+
+    const url = `${baseUrl}/status/${merchid}/${transactionReference}`;
+
+    try {
+      const response = await axios.get(url, {
+        headers: this.buildHeaders({
+          'Authorization': this.getAuthHeader()
+        }),
+        timeout: 10000
+      });
+
+      const data = response.data;
+      const success = data.respstat === 'A';
+
+      return {
+        success,
+        transactionReference: data.retref,
+        responseCode: data.respcode,
+        responseMessage: data.resptext,
+        rawResponse: JSON.stringify(data)
+      };
+    } catch (error: any) {
+      throw this.mapGatewayError('getTransaction', error);
+    }
+  }
+
+  public override async verifyWebhook(params: {
+    headers: Record<string, string>;
+    rawBody: string;
+    webhookSecret: string;
+  }): Promise<boolean> {
+    try {
+      const signatureHeader = params.headers['x-cardconnect-signature'] || params.headers['X-Cardconnect-Signature'];
+      if (!signatureHeader) return false;
+
+      const { createHmac } = await import('crypto');
+      const expectedSignature = createHmac('sha256', params.webhookSecret)
+        .update(params.rawBody)
+        .digest('hex');
+
+      return signatureHeader === expectedSignature;
+    } catch {
+      return false;
+    }
+  }
 }
-export const CardpointeGatewayAdapter = CustomGatewayAdapter;

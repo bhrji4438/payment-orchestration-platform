@@ -1,11 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { gatewayFactory } from '../gateways/factory/gateway.factory.ts';
-import { kafkaService } from '../../infrastructure/kafka/kafka.service.ts';
-import { generateUuidV7 } from '../../../../shared/ids/generate-uuid-v7.ts';
-import { logger } from '../../../../shared/logger/logger.ts';
-
-const prisma = new PrismaClient();
+import { gatewayFactory } from '../gateways/factory/gateway.factory';
+import { kafkaService } from '../../infrastructure/kafka/kafka.service';
+import { generateUuidV7 } from '@shared/ids/generate-uuid-v7';
+import { logger } from '@shared/logger/logger';
+import { prisma } from '../../infrastructure/database/prisma';
 const router = Router();
 
 async function handleWebhook(

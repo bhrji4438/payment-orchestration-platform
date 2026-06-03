@@ -1,11 +1,19 @@
-import { PrismaClient } from '@prisma/client';
-import { createLogger } from '../../../../shared/logger/create-logger';
-import { generateUuidV7 } from '../../../../shared/ids/generate-uuid-v7';
+import { PrismaClient, Prisma } from '@prisma/client';
+import { createLogger } from '@shared/logger/create-logger';
+import { generateUuidV7 } from '@shared/ids/generate-uuid-v7';
 
 const prisma = new PrismaClient();
 const logger = createLogger('settlement-service');
 
+let isReconciling = false;
+
 export async function runReconciliation() {
+  if (isReconciling) {
+    logger.info('Settlement reconciliation already in progress. Skipping cycle.');
+    return;
+  }
+
+  isReconciling = true;
   logger.info('Starting gateway payout reconciliation run...');
 
   try {
@@ -34,21 +42,7 @@ export async function runReconciliation() {
 
       const settlementId = generateUuidV7();
       let totalReconciledAmount = 0;
-
-      // Create settlement header
-      await prisma.settlement.create({
-        data: {
-          id: settlementId,
-          merchantId: config.merchantId,
-          gatewayConfigId: config.id,
-          settlementDate: new Date(),
-          totalAmount: 0, // Will update below
-          currency: 'USD',
-          status: 'PENDING'
-        }
-      });
-
-      const itemsData = [];
+      const itemsData: Prisma.SettlementItemCreateManyInput[] = [];
 
       for (const payment of unreconciledPayments) {
         const paymentAmount = Number(payment.amount);
@@ -77,41 +71,60 @@ export async function runReconciliation() {
         });
       }
 
-      // Bulk create items
-      await prisma.settlementItem.createMany({
-        data: itemsData
-      });
-
-      // Update header
-      const hasVariance = itemsData.some(i => i.status === 'VARIANCE');
-      await prisma.settlement.update({
-        where: { id: settlementId },
-        data: {
-          totalAmount: totalReconciledAmount,
-          status: hasVariance ? 'DISCREPANCY' : 'MATCHED'
-        }
-      });
-
-      // Write transactional outbox event
-      await prisma.outboxEvent.create({
-        data: {
-          id: generateUuidV7(),
-          topic: hasVariance ? 'settlement.discrepancy' : 'settlement.completed',
-          key: settlementId,
-          payload: JSON.stringify({
-            settlementId,
-            configId: config.id,
+      // Execute database operations atomically in a transaction
+      await prisma.$transaction(async (tx) => {
+        // Create settlement header
+        await tx.settlement.create({
+          data: {
+            id: settlementId,
             merchantId: config.merchantId,
-            totalAmount: totalReconciledAmount,
-            status: hasVariance ? 'DISCREPANCY' : 'MATCHED'
-          }),
-          status: 'PENDING'
-        }
-      });
+            gatewayConfigId: config.id,
+            settlementDate: new Date(),
+            totalAmount: 0, // Will update below
+            currency: 'USD',
+            status: 'PENDING'
+          }
+        });
 
-      logger.info({ settlementId, status: hasVariance ? 'DISCREPANCY' : 'MATCHED' }, 'Settlement reconciliation complete');
+        // Bulk create items
+        await tx.settlementItem.createMany({
+          data: itemsData
+        });
+
+        // Update header
+        const hasVariance = itemsData.some(i => i.status === 'VARIANCE');
+        const finalStatus = hasVariance ? 'DISCREPANCY' : 'MATCHED';
+        await tx.settlement.update({
+          where: { id: settlementId },
+          data: {
+            totalAmount: totalReconciledAmount,
+            status: finalStatus
+          }
+        });
+
+        // Write transactional outbox event
+        await tx.outboxEvent.create({
+          data: {
+            id: generateUuidV7(),
+            topic: hasVariance ? 'settlement.discrepancy' : 'settlement.completed',
+            key: settlementId,
+            payload: JSON.stringify({
+              settlementId,
+              configId: config.id,
+              merchantId: config.merchantId,
+              totalAmount: totalReconciledAmount,
+              status: finalStatus
+            }),
+            status: 'PENDING'
+          }
+        });
+
+        logger.info({ settlementId, status: finalStatus }, 'Settlement transaction committed successfully');
+      });
     }
   } catch (error: any) {
     logger.error({ error: error.message }, 'Failed during settlement reconciliation cycle');
+  } finally {
+    isReconciling = false;
   }
 }

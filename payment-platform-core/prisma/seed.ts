@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { createHash } from 'crypto';
-import { generateUuidV7 } from '../src/shared/utils/uuid.ts';
-import { credentialEncryptionService } from '../src/modules/gateways/credential-encryption.service.ts';
+import { generateUuidV7 } from '@shared/ids/generate-uuid-v7';
+import { credentialEncryptionService } from '@shared/crypto/credential-encryption';
 import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();

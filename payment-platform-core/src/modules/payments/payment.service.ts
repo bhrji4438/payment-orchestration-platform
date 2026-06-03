@@ -1,11 +1,9 @@
-import { PrismaClient } from '@prisma/client';
-import { uow } from '../../infrastructure/database/uow.ts';
-import { gatewayFactory } from '../gateways/factory/gateway.factory.ts';
-import { CircuitBreaker } from '../gateways/circuit-breaker.ts';
-import { generateUuidV7 } from '../../../../shared/ids/generate-uuid-v7.ts';
-import { logger } from '../../../../shared/logger/logger.ts';
-
-const prisma = new PrismaClient();
+import { uow } from '../../infrastructure/database/uow';
+import { prisma } from '../../infrastructure/database/prisma';
+import { gatewayFactory } from '../gateways/factory/gateway.factory';
+import { CircuitBreaker } from '../gateways/circuit-breaker';
+import { generateUuidV7 } from '@shared/ids/generate-uuid-v7';
+import { logger } from '@shared/logger/logger';
 
 export class PaymentService {
   public async createPayment(params: {
@@ -65,6 +63,8 @@ export class PaymentService {
       const breaker = CircuitBreaker.getBreaker(config.id);
 
       try {
+        let isBusinessDecline = false;
+
         await breaker.execute(async () => {
           logger.info({ paymentId, configId: config.id, provider: config.gatewayProvider.code }, 'Routing payment execution via Abstract Gateway');
 
@@ -111,14 +111,24 @@ export class PaymentService {
           });
 
           if (!gatewayResult.success) {
-            throw new Error(`Gateway response failed: ${gatewayResult.responseMessage}`);
+            isBusinessDecline = true;
+            const declineMessage = gatewayResult.responseMessage || 'Transaction declined';
+            lastError = new Error(declineMessage);
+            (lastError as any).isBusiness = true;
+            return;
           }
 
           successResponse = gatewayResult;
           finalGatewayConfigId = config.id;
         });
 
-        break;
+        if (isBusinessDecline) {
+          break;
+        }
+
+        if (successResponse) {
+          break;
+        }
       } catch (err: any) {
         logger.warn({ configId: config.id, error: err.message }, 'Abstract gateway route execution failed, retrying failover...');
         lastError = err;
@@ -384,6 +394,80 @@ export class PaymentService {
       });
 
       return updatedPayment;
+    });
+  }
+
+  public async syncPaymentStatus(paymentId: string) {
+    return await uow.run(async (repos, tx) => {
+      const payment = await repos.payments.findById(paymentId);
+      if (!payment) throw new Error('Payment record not found.');
+      if (!payment.gatewayConfigId || !payment.gatewayToken) {
+        throw new Error('Missing gateway reference details for status synchronization.');
+      }
+
+      const config = await tx.merchantGatewayConfiguration.findUnique({
+        where: { id: payment.gatewayConfigId }
+      });
+      if (!config) throw new Error('Gateway configuration was deleted or disabled.');
+
+      const gateway = await gatewayFactory.create(payment.merchantId, config.id);
+      const gatewayResult = await gateway.getTransaction(payment.gatewayToken);
+
+      if (gatewayResult.success) {
+        const isCurrentlyPending = payment.status === 'PENDING' || payment.status === 'AUTHORIZED';
+        if (isCurrentlyPending) {
+          const finalStatus = 'CAPTURED';
+          
+          const updatedPayment = await repos.payments.update(
+            paymentId,
+            { status: finalStatus },
+            payment.version
+          );
+
+          const existingLedger = await tx.transaction.findFirst({
+            where: { paymentId, type: 'CREDIT', deletedAt: null }
+          });
+          if (!existingLedger) {
+            await repos.transactions.create({
+              id: generateUuidV7(),
+              paymentId,
+              amount: payment.amount,
+              type: 'CREDIT',
+              status: 'SETTLED'
+            });
+          }
+
+          await repos.outbox.create('payment.captured', paymentId, {
+            paymentId,
+            merchantId: payment.merchantId,
+            amount: Number(payment.amount),
+            currency: payment.currency,
+            gatewayTxnId: payment.gatewayToken
+          });
+
+          return updatedPayment;
+        }
+      } else {
+        const isNotFailed = payment.status !== 'FAILED' && payment.status !== 'VOIDED';
+        if (isNotFailed) {
+          const updatedPayment = await repos.payments.update(
+            paymentId,
+            { status: 'FAILED' },
+            payment.version
+          );
+
+          await repos.outbox.create('payment.failed', paymentId, {
+            paymentId,
+            merchantId: payment.merchantId,
+            amount: Number(payment.amount),
+            error: gatewayResult.responseMessage || 'Gateway transaction status reported failure.'
+          });
+
+          return updatedPayment;
+        }
+      }
+
+      return payment;
     });
   }
 }

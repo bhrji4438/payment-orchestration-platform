@@ -51,7 +51,7 @@ export class PaymentPlatformClient {
     }
     
     this.client = axios.create({
-      baseURL: options.baseUrl || 'http://localhost:3001',
+      baseURL: options.baseUrl || process.env.PAYMENT_PLATFORM_CORE_URL || 'http://localhost:3000',
       headers: {
         'Authorization': `Bearer ${options.apiKey}`,
         'Content-Type': 'application/json'

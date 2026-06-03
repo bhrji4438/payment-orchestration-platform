@@ -1,4 +1,4 @@
-import { KAFKA_TOPICS, KafkaTopic } from '../constants/kafka.constants.ts';
+import { KAFKA_TOPICS, KafkaTopic } from '../constants/kafka.constants';
 
 export { KAFKA_TOPICS, KafkaTopic };
 

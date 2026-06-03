@@ -1,6 +1,6 @@
 import http from 'http';
-import { runReconciliation } from './services/settlement.service.ts';
-import { createLogger } from '../../../shared/logger/create-logger';
+import { runReconciliation } from './services/settlement.service';
+import { createLogger } from '@shared/logger/create-logger';
 
 const logger = createLogger('settlement-service');
 

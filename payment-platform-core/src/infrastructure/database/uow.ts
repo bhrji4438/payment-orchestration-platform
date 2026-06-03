@@ -1,7 +1,6 @@
-import { Prisma, PrismaClient } from '@prisma/client';
-import { generateUuidV7 } from '../../../../shared/ids/generate-uuid-v7.ts';
-
-const prisma = new PrismaClient();
+import { Prisma } from '@prisma/client';
+import { generateUuidV7 } from '@shared/ids/generate-uuid-v7';
+import { prisma } from './prisma';
 
 export class PaymentRepository {
   constructor(private readonly tx: Prisma.TransactionClient) {}
@@ -10,7 +9,7 @@ export class PaymentRepository {
     return this.tx.payment.create({ data });
   }
 
-  public async update(id: string, data: Prisma.PaymentUpdateInput, expectedVersion?: number) {
+  public async update(id: string, data: Prisma.PaymentUncheckedUpdateInput, expectedVersion?: number) {
     if (expectedVersion !== undefined) {
       // Optimistic locking: update if version matches expected
       const updated = await this.tx.payment.updateMany({

@@ -1,8 +1,7 @@
-import { PrismaClient } from '@prisma/client';
 import { createHash } from 'crypto';
-import { generateUuidV7 } from '../../../shared/ids/generate-uuid-v7.ts';
-
-const prisma = new PrismaClient();
+import { Prisma } from '@prisma/client';
+import { generateUuidV7 } from '@shared/ids/generate-uuid-v7';
+import { prisma } from '../infrastructure/database/prisma';
 
 export interface IdempotencyResult {
   isReplay: boolean;
@@ -29,7 +28,7 @@ export class IdempotencyService {
     ttlSeconds = 86400 // 24 Hours default
   ): Promise<IdempotencyResult> {
     // Run inside an isolated transaction to prevent race conditions
-    return await prisma.$transaction(async (tx) => {
+    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const existing = await tx.idempotencyKey.findUnique({
         where: {
           merchantId_idempotencyKey: {
@@ -76,7 +75,7 @@ export class IdempotencyService {
 
       return {
         isReplay: false,
-        status: 'PROCESSING'
+        status: 'PROCESSING' as const
       };
     });
   }
@@ -90,6 +89,16 @@ export class IdempotencyService {
     responsePayload: any,
     status: 'COMPLETED' | 'FAILED'
   ): Promise<void> {
+    if (status === 'FAILED') {
+      await prisma.idempotencyKey.deleteMany({
+        where: {
+          merchantId,
+          idempotencyKey
+        }
+      });
+      return;
+    }
+
     await prisma.idempotencyKey.update({
       where: {
         merchantId_idempotencyKey: {

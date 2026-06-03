@@ -8,8 +8,8 @@ import {
   EcheckRefundRequestDto,
   EcheckVoidRequestDto,
   PaymentResponseDto
-} from '../dto/gateway.dto.ts';
-import { logger } from '../logger/logger.ts';
+} from '../dto/gateway.dto';
+import { logger } from '../logger/logger';
 
 export abstract class AbstractPaymentGateway {
   protected readonly correlationId: string;
@@ -32,6 +32,17 @@ export abstract class AbstractPaymentGateway {
   public abstract echeckSale(request: EcheckSaleRequestDto): Promise<PaymentResponseDto>;
   public abstract echeckRefund(request: EcheckRefundRequestDto): Promise<PaymentResponseDto>;
   public abstract echeckVoid(request: EcheckVoidRequestDto): Promise<PaymentResponseDto>;
+  
+  public abstract getTransaction(transactionReference: string): Promise<PaymentResponseDto>;
+
+  public async verifyWebhook(params: {
+    headers: Record<string, string>;
+    rawBody: string;
+    webhookSecret: string;
+  }): Promise<boolean> {
+    // Strict by default: subclass adapters must override and implement secure verification.
+    return false;
+  }
 
   // --- Base Gateway Responsibilities (Shared Functionality) ---
   

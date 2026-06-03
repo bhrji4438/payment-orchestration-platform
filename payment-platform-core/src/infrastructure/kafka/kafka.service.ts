@@ -1,5 +1,5 @@
 import { Kafka, Producer } from 'kafkajs';
-import { logger } from '../../../../shared/logger/logger.ts';
+import { logger } from '@shared/logger/logger';
 
 export class KafkaService {
   private kafka: Kafka | null = null;
@@ -10,7 +10,7 @@ export class KafkaService {
   constructor() {
     const brokers = process.env.KAFKA_BROKERS || 'localhost:9092';
     this.brokerList = brokers.split(',');
-    
+
     // Disable Kafka for pure offline/local test if env is set
     if (process.env.KAFKA_ENABLED === 'false') {
       logger.info('Kafka is disabled via env configuration. Using simulated events.');
@@ -46,7 +46,7 @@ export class KafkaService {
 
   public async publish(topic: string, key: string, payload: any): Promise<boolean> {
     const payloadStr = typeof payload === 'string' ? payload : JSON.stringify(payload);
-    
+
     if (this.isConnected && this.producer) {
       try {
         await this.producer.send({

@@ -1,6 +1,6 @@
 # API Specification & Authentication Guide
 
-This document details the public API interface, authentication standards, webhook signatures, and rate limit rules.
+This document details the public API interface, authentication standards, request/response validation rules, unified error formats, and webhook verification procedures.
 
 ---
 
@@ -21,13 +21,29 @@ The platform supports two authentication strategies:
 
 ---
 
-## 2. API Endpoints
+## 2. Request Headers
 
-All endpoints require API key authentication and accept the `Idempotency-Key` header for write operations.
+All write operations (`POST`, `PUT`, `PATCH`, `DELETE`) require the following headers:
 
-### 2.1 POST `/v1/payments`
+| Header | Type | Required | Description |
+|---|---|---|---|
+| `Authorization` | String | Yes | Bearer token format (`Bearer sk_...`) |
+| `Idempotency-Key` | UUIDv7 | Yes (Write) | Unique request token. Prevents duplicate charges. See **[Redis Architecture & Cache Guide](./redis-guide.md)** |
+| `Content-Type` | String | Yes | Must be `application/json` |
+
+---
+
+## 3. Validation and Zod Schemas
+
+All incoming payloads are strictly validated at the controller boundary using Zod schemas imported from `@shared/validators/payment.schemas`. If validation fails, the API returns a `400 Bad Request` containing details of the validation errors.
+
+---
+
+## 4. API Endpoints
+
+### 4.1 POST `/v1/payments`
 Processes a credit card payment (sale or authorization).
-- **Request Body**:
+- **Request Body (Zod validated)**:
   ```json
   {
     "amount": 100.00,
@@ -54,7 +70,7 @@ Processes a credit card payment (sale or authorization).
   }
   ```
 
-### 2.2 POST `/v1/captures`
+### 4.2 POST `/v1/captures`
 Captures a pre-authorized payment.
 - **Request Body**:
   ```json
@@ -63,8 +79,17 @@ Captures a pre-authorized payment.
     "amount": 100.00
   }
   ```
+- **Response (200 OK)**:
+  ```json
+  {
+    "id": "p0000001-1111-7000-8000-000000000001",
+    "status": "CAPTURED",
+    "amount": "100.00",
+    "currency": "USD"
+  }
+  ```
 
-### 2.3 POST `/v1/refunds`
+### 4.3 POST `/v1/refunds`
 Refunds a captured payment.
 - **Request Body**:
   ```json
@@ -74,8 +99,18 @@ Refunds a captured payment.
     "reason": "Customer request"
   }
   ```
+- **Response (200 OK)**:
+  ```json
+  {
+    "id": "r0000001-1111-7000-8000-000000000001",
+    "paymentId": "p0000001-1111-7000-8000-000000000001",
+    "amount": "50.00",
+    "status": "SUCCESS",
+    "gatewayTxnId": "txn_mock_refund_123"
+  }
+  ```
 
-### 2.4 POST `/v1/voids`
+### 4.4 POST `/v1/voids`
 Voids a pre-authorized payment.
 - **Request Body**:
   ```json
@@ -84,15 +119,68 @@ Voids a pre-authorized payment.
     "reason": "Order cancelled"
   }
   ```
+- **Response (200 OK)**:
+  ```json
+  {
+    "id": "v0000001-1111-7000-8000-000000000001",
+    "paymentId": "p0000001-1111-7000-8000-000000000001",
+    "status": "SUCCESS",
+    "gatewayTxnId": "txn_mock_void_123"
+  }
+  ```
 
 ---
 
-## 3. Webhook Signature Verification
+## 5. Unified Error Response Format
 
-Webhooks are signed using HMAC-SHA256.
+Errors are serialized consistently across all endpoints. They derive from the custom error hierarchy in `@shared/errors/errors`.
+
+### Error Response Schema
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid payment details provided.",
+    "details": [
+      {
+        "field": "card.pan",
+        "message": "PAN must be a valid 13-19 digit credit card number."
+      }
+    ]
+  }
+}
+```
+
+### Common Error Codes
+
+| HTTP Status | Error Code | Description |
+|---|---|---|
+| `400` | `VALIDATION_ERROR` | Request payload failed validation checks. |
+| `401` | `UNAUTHORIZED` | API key is missing, invalid, or expired. |
+| `404` | `NOT_FOUND` | The requested entity does not exist. |
+| `409` | `CONFLICT` | Key collision (e.g. active idempotency key with different body). |
+| `500` | `INTERNAL_SERVER_ERROR` | An unexpected server-side error occurred. |
+
+For detailed handling and implementation, refer to the **[Development & Coding Rules](./development/development-rules.md)** guide.
+
+---
+
+## 6. Webhook Signature Verification
+
+Webhooks are signed using HMAC-SHA256. This ensures payloads are sent by the platform and have not been tampered with in transit.
+
+### Header Format
+```http
+X-Webhook-Signature: t=1685600000,v1=a62fd9b31d2798e4f1648a336338573130dcf2f5b4de09148d28a5ff6b1424e8
+```
+- `t`: The epoch timestamp when the webhook was sent.
+- `v1`: The computed HMAC-SHA256 signature.
 
 ### Verification Flow:
-- Calculate the HMAC-SHA256 signature of the raw request body using the shared webhook secret.
-- Compare the calculated signature against the signature header.
-- Reject the request if they do not match.
-- This logic is handled by `verifySignature()` in the SDK.
+1. Extract the timestamp `t` and the signature `v1` from the `X-Webhook-Signature` header.
+2. Construct the signature payload by concatenating: `t` + `.` + raw request body string.
+3. Compute the HMAC-SHA256 of the payload using the merchant's webhook secret as the key.
+4. Perform a constant-time string comparison to compare the computed hash against `v1`.
+5. Reject the webhook if they do not match or if the timestamp `t` is older than 5 minutes (preventing replay attacks).
+
+This flow is pre-implemented in the SDK client's `verifyWebhook()` method.

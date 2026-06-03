@@ -1,4 +1,4 @@
-import { AbstractPaymentGateway } from '../../../../../shared/contracts/abstract-payment-gateway.ts';
+import { AbstractPaymentGateway } from '@shared/contracts/abstract-payment-gateway';
 import {
   CreditCardSaleRequestDto,
   CreditCardAuthorizeRequestDto,
@@ -9,7 +9,7 @@ import {
   EcheckRefundRequestDto,
   EcheckVoidRequestDto,
   PaymentResponseDto
-} from '../../../../../shared/dto/gateway.dto.ts';
+} from '@shared/dto/gateway.dto';
 import axios from 'axios';
 
 export class AuthorizeNetGatewayAdapter extends AbstractPaymentGateway {
@@ -341,5 +341,69 @@ export class AuthorizeNetGatewayAdapter extends AbstractPaymentGateway {
       responseMessage: 'ACH void approved (Mock)',
       rawResponse: JSON.stringify({ transactionResponse: { responseCode: '1', transId: request.transactionReference } })
     };
+  }
+
+  public async getTransaction(transactionReference: string): Promise<PaymentResponseDto> {
+    const loginId = this.credentials.loginId || 'mock_login_id';
+    const transKey = this.credentials.transactionKey || 'mock_trans_key';
+
+    if (loginId === 'mock_login_id') {
+      return {
+        success: true,
+        transactionReference,
+        responseCode: '1',
+        responseMessage: 'Settled (Mock)',
+        rawResponse: JSON.stringify({ transactionResponse: { responseCode: '1', transId: transactionReference } })
+      };
+    }
+
+    const payload = {
+      getTransactionDetailsRequest: {
+        merchantAuthentication: {
+          name: loginId,
+          transactionKey: transKey
+        },
+        transId: transactionReference
+      }
+    };
+
+    try {
+      const res = await axios.post(this.getEndpoint(), payload, {
+        headers: this.buildHeaders()
+      });
+      const tx = res.data?.transaction || {};
+      const success = tx.transactionStatus === 'settledSuccessfully' || tx.transactionStatus === 'capturedPendingSettlement';
+
+      return {
+        success,
+        transactionReference: tx.transId,
+        responseCode: tx.responseCode,
+        responseMessage: tx.transactionStatus,
+        rawResponse: JSON.stringify(res.data)
+      };
+    } catch (error: any) {
+      throw this.mapGatewayError('getTransaction', error);
+    }
+  }
+
+  public override async verifyWebhook(params: {
+    headers: Record<string, string>;
+    rawBody: string;
+    webhookSecret: string;
+  }): Promise<boolean> {
+    try {
+      const signatureHeader = params.headers['x-anet-signature'] || params.headers['X-Anet-Signature'];
+      if (!signatureHeader) return false;
+
+      const signature = signatureHeader.toLowerCase().replace('sha512=', '').trim();
+      const { createHmac } = await import('crypto');
+      const expectedSignature = createHmac('sha512', params.webhookSecret)
+        .update(params.rawBody)
+        .digest('hex');
+
+      return expectedSignature === signature;
+    } catch {
+      return false;
+    }
   }
 }

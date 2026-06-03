@@ -1,5 +1,5 @@
 import http from 'http';
-import { startNotificationConsumer } from './consumers/notification.consumer.ts';
+import { startNotificationConsumer } from './consumers/notification.consumer';
 import pino from 'pino';
 
 const logger = pino({

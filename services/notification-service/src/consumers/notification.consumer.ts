@@ -1,7 +1,7 @@
 import { Kafka } from 'kafkajs';
 import { PrismaClient } from '@prisma/client';
 import pino from 'pino';
-import { processNotification } from '../services/notification.service.ts';
+import { processNotification } from '../services/notification.service';
 
 const prisma = new PrismaClient();
 const logger = pino({

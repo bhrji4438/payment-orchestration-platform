@@ -1,12 +1,10 @@
-import { PrismaClient } from '@prisma/client';
-import { AbstractPaymentGateway } from '../../../../../shared/contracts/abstract-payment-gateway.ts';
-import { StripeGatewayAdapter } from '../stripe/stripe-gateway.adapter.ts';
-import { AuthorizeNetGatewayAdapter } from '../authorize-net/authorize-net-gateway.adapter.ts';
-import { NmiGatewayAdapter } from '../nmi/nmi-gateway.adapter.ts';
-import { CustomGatewayAdapter } from '../custom/custom-gateway.adapter.ts';
-import { credentialEncryptionService } from '../../../../../shared/crypto/credential-encryption.ts';
-
-const prisma = new PrismaClient();
+import { AbstractPaymentGateway } from '@shared/contracts/abstract-payment-gateway';
+import { StripeGatewayAdapter } from '../stripe/stripe-gateway.adapter';
+import { AuthorizeNetGatewayAdapter } from '../authorize-net/authorize-net-gateway.adapter';
+import { NmiGatewayAdapter } from '../nmi/nmi-gateway.adapter';
+import { CardpointeGatewayAdapter } from '../cardpointe/cardpointe-gateway.adapter';
+import { credentialEncryptionService } from '@shared/crypto/credential-encryption';
+import { prisma } from '../../../infrastructure/database/prisma';
 
 export class GatewayFactory {
   private gatewayClassMap: Map<string, any> = new Map();
@@ -15,8 +13,8 @@ export class GatewayFactory {
     this.gatewayClassMap.set('STRIPE', StripeGatewayAdapter);
     this.gatewayClassMap.set('AUTHORIZE_NET', AuthorizeNetGatewayAdapter);
     this.gatewayClassMap.set('NMI', NmiGatewayAdapter);
-    this.gatewayClassMap.set('CARDPOINTE', CustomGatewayAdapter);
-    this.gatewayClassMap.set('CUSTOM', CustomGatewayAdapter);
+    this.gatewayClassMap.set('CARDPOINTE', CardpointeGatewayAdapter);
+    this.gatewayClassMap.set('CUSTOM', CardpointeGatewayAdapter);
   }
 
   public async create(
@@ -70,6 +68,17 @@ export class GatewayFactory {
       config.environment,
       merchantId
     );
+  }
+
+  public getAdapter(gatewayCode: string): AbstractPaymentGateway {
+    const providerCode = gatewayCode.toUpperCase();
+    const GatewayClass = this.gatewayClassMap.get(providerCode);
+
+    if (!GatewayClass) {
+      throw new Error(`Unsupported Gateway Provider Code: ${providerCode}`);
+    }
+
+    return new GatewayClass({}, 'sandbox', 'system');
   }
 }
 

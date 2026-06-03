@@ -1,31 +1,32 @@
 # Database Design & Persistence Strategy
 
-This document details the PostgreSQL schema layouts, database relations, indexing strategies, and soft delete patterns for the platform.
+This document details the PostgreSQL database layout, table directory, index optimizations, UUIDv7 primary keys, and historical audit preservation strategies.
 
 ---
 
 ## 1. ID Generation Strategy: UUIDv7
 
-The system uses **UUIDv7** for all public keys.
+The Payment Orchestration Platform uses time-ordered **UUIDv7** identifiers for all entity primary keys (e.g. users, merchants, payments, attempts).
 
 ### Why UUIDv7?
-1. **Time-Ordered Sorting**: UUIDv7 embeds a millisecond-precision Unix timestamp in the most significant 48 bits. This makes them sortable, which prevents key fragmentation and index re-sorting in B-Tree tables (common with random UUIDv4).
-2. **Security**: They do not expose database sequence patterns like auto-incrementing integers, preventing enumeration attacks on public API endpoints.
-3. **Decentralized Generation**: IDs are safely generated in-memory without blocking network queries to database sequences.
+1. **Time-Ordered Sorting**: Unlike standard random UUIDv4, UUIDv7 embeds a millisecond-precision Unix timestamp in the most significant 48 bits. This makes keys monotonically increasing over time.
+2. **Preventing B-Tree Index Fragmentation**: In relational databases like PostgreSQL, primary keys are indexed using B-Trees. Random UUIDv4 keys cause frequent page splits and re-balancing. UUIDv7 keys behave like auto-incrementing integers, appending new entries at the end of the index and keeping indexes highly performant.
+3. **Decentralized Generation**: IDs are generated in-application memory without requesting sequences from the database, eliminating network blocking.
+4. **Security**: They do not leak sequence counts (preventing ID enumeration/scraping attacks).
 
 ---
 
-## 2. Core Tables Directory
+## 2. Table Directory & Model Relations
 
-- **`users`**: Contains core user accounts. Linked to roles and audit logs.
-- **`roles` / `permissions` / `role_permissions`**: RBAC permissions matrix.
-- **`merchants`**: Tenants. Contains active status blocks.
-- **`merchant_users`**: Associates users with tenants (multi-tenancy isolation).
+- **`users`**: Platform user accounts. Has a foreign key to `roles`.
+- **`roles` / `permissions` / `role_permissions`**: The RBAC authorization schema.
+- **`merchants`**: Tenant metadata (multi-tenancy isolation).
+- **`merchant_users`**: Many-to-many join table mapping users to merchant accounts.
 - **`customers`**: Holds tokenized profile contacts associated with merchants.
-- **`gateway_providers`**: Master record list of supported gateways (Stripe, Authorize.Net, Cardpointe, NMI).
-- **`merchant_gateway_configurations`**: Holds encrypted gateway credentials, Priorities, and Environment flags.
-- **`payments`**: Contains transaction states, optimistic lock version keys, card masks (brand, last four, expiry), and gateway tokens.
-- **`payment_attempts`**: Logging table tracking every gateway transaction attempt.
+- **`gateway_providers`**: Master reference list of supported gateway systems (`STRIPE`, `AUTHORIZE_NET`, `NMI`, `CARDPOINTE`, `CUSTOM`).
+- **`merchant_gateway_configurations`**: Decrypted gateway credentials, priorities, and environment flags.
+- **`payments`**: Core transaction details (amount, status, optimistic lock version, card metadata masks, gateway token references).
+- **`payment_attempts`**: Audit trail of every single gateway call, storing raw gateway response codes, logs, and transaction reference IDs.
 - **`transactions`**: Ledger entries tracking credits and debits.
 - **`refunds` / `voids`**: Reversal transactions.
 - **`invoices`**: Links transaction IDs with PDF files.
@@ -39,7 +40,7 @@ The system uses **UUIDv7** for all public keys.
 
 ---
 
-## 3. Database Indexes
+## 3. Database Indexes Optimization
 
 To optimize lookup speeds, explicit indexing is applied to target query paths:
 - `payments(merchantId, status)`: Accelerates dashboard analytics aggregation queries.
@@ -50,7 +51,25 @@ To optimize lookup speeds, explicit indexing is applied to target query paths:
 
 ---
 
-## 4. Soft Delete Pattern
+## 4. The Transactional Outbox Schema (`outbox_events`)
+
+The `outbox_events` table acts as a reliable buffer queue to ensure at-least-once delivery of event payloads.
+
+### Schema Fields
+| Column Name | SQL Type | Description |
+|---|---|---|
+| `id` | `UUID` (v7) | Primary key, time-sorted |
+| `topic` | `VARCHAR` | Kafka target topic (e.g. `payment.captured`) |
+| `key` | `VARCHAR` | Optional routing key (e.g. `paymentId`) |
+| `payload` | `TEXT` | JSON event payload string |
+| `status` | `VARCHAR` | `PENDING`, `PUBLISHED`, `FAILED` |
+| `attempts` | `INT` | Delivery attempt count |
+| `createdAt` | `TIMESTAMP` | Timestamp of creation |
+| `updatedAt` | `TIMESTAMP` | Timestamp of last status change |
+
+---
+
+## 5. Soft Delete Pattern
 
 To ensure auditability, critical business entities (payments, users, gateway configs) are never deleted via `DELETE` SQL commands.
 - They include a nullable `deletedAt` field.

@@ -1,7 +1,7 @@
 import { Kafka } from 'kafkajs';
 import { PrismaClient } from '@prisma/client';
-import { logger } from '../../../../shared/logger/logger.ts';
-import { createInvoice } from '../services/invoice.service.ts';
+import { logger } from '@shared/logger/logger';
+import { createInvoice } from '../services/invoice.service';
 
 const prisma = new PrismaClient();
 

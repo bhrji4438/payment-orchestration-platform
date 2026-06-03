@@ -14,213 +14,228 @@ Before starting, ensure you have the following installed:
 | **Node.js** | 22+ (LTS) | Local TypeScript development only |
 | **Git** | Any | Version control |
 
-> **Tip**: Docker is the only hard requirement. You can run the entire platform with `docker compose up --build` without any local Node.js installation.
+---
+
+## 2. Platform Services, URLs & Ports
+
+Below is the port map of all services running locally under Docker Compose:
+
+### Application Services
+- **Core Engine API**: `http://localhost:3000` (Main transaction interface)
+- **Invoice Service**: `http://localhost:3001` (PDF generator)
+- **Notification Service**: `http://localhost:3002` (SMTP/SMS dispatcher)
+- **Audit Service**: `http://localhost:3003` (Compliance logging consumer)
+- **Settlement Service**: `http://localhost:3004` (Payout reconciliations)
+- **Reporting Service**: `http://localhost:3005` (Analytics dashboard aggregator)
+- **Merchant Web Portal**: `http://localhost:3006` (Next.js 15 Console UI)
+
+### Infrastructure consoles & DBs
+- **PostgreSQL**: `localhost:5432` (Primary Database)
+- **Redis**: `localhost:6379` (Idempotency and lock storage)
+- **Kafka Broker**: `localhost:9092` / `localhost:29092` (Event bus broker)
+- **MailHog UI**: `http://localhost:8025` (SMTP port: `1025`)
+- **MinIO S3 Console**: `http://localhost:9001` (S3 API port: `9000`)
 
 ---
 
-## 2. Directory Structure
+## 3. Default Credentials & Environment Configuration
 
-The repository is a monorepo with a root-level shared library:
+### Seeds & DB Access
+- **PostgreSQL Database**: `payment_orchestration`
+- **PostgreSQL User / Password**: `postgres / postgres`
+- **Seeded Merchant Admin Account**: `admin@paymentorchestrator.com / admin123`
+- **Seeded Developer API Key**: `sk_test_demo_key_123456789`
+- **MinIO Access / Secret Key**: `minioadmin / minioadmin`
 
-| Path | Role | Port |
-|---|---|---|
-| `shared/` | Single source of truth — loggers, UUIDs, DTOs, validators, constants | — |
-| `payment-platform-core/` | Core ACID payment engine (Express + Prisma) | `3000` |
-| `payment-platform-portal/` | Next.js 15 merchant & developer dashboard | `3006` |
-| `payment-platform-sdk/` | Client SDK for Node.js integrations | — |
-| `services/invoice-service/` | PDF invoice generator | `3001` |
-| `services/notification-service/` | SMTP email & SMS dispatcher | `3002` |
-| `services/audit-service/` | Compliance audit logger | `3003` |
-| `services/settlement-service/` | Bank reconciliation engine | `3004` |
-| `services/reporting-service/` | Analytics aggregation service | `3005` |
-
----
-
-## 3. Backing Services & Ports
-
-All infrastructure is provided via Docker. Default ports:
-
-| Service | Port | Purpose |
-|---|---|---|
-| PostgreSQL | `5432` | Relational database |
-| Redis | `6379` | Idempotency locks, rate limiting |
-| Kafka | `9092` | Async event broker |
-| MailHog (SMTP) | `1025` | Email sending (dev only) |
-| MailHog (UI) | `8025` | Email inbox viewer |
-| MinIO (S3 API) | `9000` | Object storage for PDF invoices |
-| MinIO (Console) | `9001` | MinIO admin UI |
+### Key Environment Variables
+All services read settings from their respective `.env` files. Ensure the following match local configurations:
+```env
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/payment_orchestration?schema=public"
+REDIS_URL="redis://localhost:6379"
+KAFKA_BROKERS="localhost:9092"
+ENCRYPTION_MASTER_KEY="ZGVtb19tYXN0ZXJfa2V5XzMyX2J5dGVzX2Jhc2U2NF9lbmNvZGVk" # AES key
+KAFKA_ENABLED="true"
+```
 
 ---
 
-## 4. Option A — Full Platform via Docker (Recommended)
+## 4. Boot Options
 
-The easiest way to run the entire platform with **zero local Node.js setup**:
-
+### Option A — Full Platform via Docker (Recommended)
+Easiest setup requiring zero local Node modules installation:
 ```bash
-# 1. Copy environment variables
+# 1. Copy config files
 cp .env.example .env
 
 # 2. Build and boot all containers
 docker compose up --build
 ```
 
-Once all containers are healthy, access the platform:
-
-| Interface | URL |
-|---|---|
-| Merchant Portal | http://localhost:3006 |
-| Core Engine API | http://localhost:3000 |
-| Reporting API | http://localhost:3005 |
-| MailHog (Email UI) | http://localhost:8025 |
-| MinIO (S3 Console) | http://localhost:9001 |
-
-To rebuild a specific service after code changes:
+### Option B — Local Node.js Development
+Best for active hot-reloads and rapid TypeScript debugging:
 ```bash
-docker compose up --build payment-platform-core
-docker compose up --build reporting-service
-```
-
----
-
-## 5. Option B — Local Node.js Development
-
-Use this option when actively developing and want hot-reload without rebuilding Docker images.
-
-### Step 5.1 — Boot Only Backing Infrastructure
-
-```bash
+# 1. Boot infrastructure backing containers
 docker compose up postgres redis kafka mailhog minio -d
-```
 
-### Step 5.2 — Configure Environment Variables
+# 2. Copy config templates to root and all package subfolders (single command)
+npm run bootstrap:env
 
-Copy the root `.env.example` to `.env` and update host names from Docker service names (`postgres`, `kafka`) to `localhost` for local access:
+# (Note: Edit individual .env files if needed, changing hosts like 'postgres' to 'localhost' for local network execution)
 
-```bash
-cp .env.example .env
-# Edit .env: change DATABASE_URL host from 'postgres' to 'localhost', etc.
-```
-
-### Step 5.3 — Install All Dependencies (One Command)
-
-From the repository root:
-```bash
+# 3. Install dependencies across the monorepo workspace
 npm run install:all
-```
 
-This runs `npm ci` sequentially across all 8 packages:
-- `payment-platform-core`
-- `payment-platform-portal`
-- `payment-platform-sdk`
-- `services/audit-service`
-- `services/invoice-service`
-- `services/notification-service`
-- `services/reporting-service`
-- `services/settlement-service`
-
-> **Note**: Each service installs its own `node_modules`. The `shared/` library is consumed via relative path imports and has no separate `package.json` — it is copied alongside each service at build time.
-
-### Step 5.4 — Run Database Migrations & Seed Data (First Time Only)
-
-```bash
+# 4. Push schema migrations and seed defaults (monolith folder)
 cd payment-platform-core
-
-# Generate Prisma client
-npm run prisma:generate
-
-# Push schema to the database
-npm run prisma:migrate
-# (or for quick dev: npx prisma db push)
-
-# Seed with demo merchants, gateways, API keys, and transactions
+npx prisma db push
 npm run prisma:seed
-```
+cd ..
 
-### Step 5.5 — Generate Prisma Client for Supporting Services
+# 5. Generate Prisma Client for microservices
+cd services/audit-service && npx prisma generate && cd ../..
+cd services/invoice-service && npx prisma generate && cd ../..
 
-Each microservice that queries the database needs its own generated Prisma client:
-
-```bash
-cd services/audit-service && npm run prisma:generate && cd ../..
-cd services/invoice-service && npm run prisma:generate && cd ../..
-cd services/notification-service && npm run prisma:generate && cd ../..
-cd services/settlement-service && npm run prisma:generate && cd ../..
-cd services/reporting-service && npm run prisma:generate && cd ../..
-```
-
-### Step 5.6 — Start Services in Dev Mode
-
-```bash
-# Start core engine + portal simultaneously (from repo root)
+# 6. Start the monolith and front-end portal
 npm run dev:all
-
-# Or start individually:
-npm run dev:core      # Core API on :3000
-npm run dev:portal    # Next.js Portal on :3006
-
-# Start microservices separately:
-cd services/reporting-service && npm run dev
-cd services/settlement-service && npm run dev
 ```
 
 ---
 
-## 6. Root Workspace Scripts Reference
+## 5. Merchant Onboarding Workflow
 
-All commands are run from the **repository root**:
+To onboard a new merchant tenant and test transactions:
 
-| Command | Description |
-|---|---|
-| `npm run install:all` | `npm ci` in all 8 packages sequentially |
-| `npm run dev:core` | Start core engine (hot-reload) |
-| `npm run dev:portal` | Start Next.js portal (hot-reload) |
-| `npm run dev:all` | Start core + portal concurrently |
-| `npm run build:all` | TypeScript build for core, portal, and SDK |
-| `npm run test:core` | Run Jest tests for the core engine |
+### Step 5.1 — Create a Tenant Merchant
+- Log in to the Merchant Web Portal (`http://localhost:3006`) with credentials `admin@paymentorchestrator.com` / `admin123`.
+- Navigate to **Merchants** → **Create Merchant**. Fill in the organization name. A unique merchant ID (UUIDv7) is generated.
+
+### Step 5.2 — Generate API Credentials
+- Go to the **Developers** tab.
+- Click **API Keys** → **Generate Private Key**. Copy the generated key (starts with `sk_test_...`). This key is used in request headers to authenticate integrations.
+
+### Step 5.3 — Configure Gateway Credentials
+- Select **Gateway Configurations** → **Configure Gateway**.
+- Choose a Provider (e.g. `Stripe`, `Cardpointe`).
+- Enter sandbox credentials. The platform encrypts details via AES-256-GCM before saving.
+- Set priority (e.g., `1` for primary routing) and check "Default".
+
+### Step 5.4 — Configure Webhook Settings
+- Go to **Webhooks** → **Register Endpoint**.
+- Provide your integration's URL and select events (e.g., `payment.captured`). Copy the webhook signature secret to verify incoming signature headers.
+
+### Step 5.5 — Test Sandbox Sale
+Run a test transaction using curl:
+```bash
+curl -X POST http://localhost:3000/v1/payments \
+  -H "Authorization: Bearer sk_test_demo_key_123456789" \
+  -H "Idempotency-Key: 01917c4a-3b2f-7000-8000-a1b2c3d4e5f6" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 19.99,
+    "currency": "USD",
+    "card": {
+      "pan": "4111111111111111",
+      "expiryMonth": "12",
+      "expiryYear": "2028",
+      "cvv": "123",
+      "holderName": "Jane Doe"
+    },
+    "capture": true
+  }'
+```
 
 ---
 
-## 7. Shared Library Development
+## 6. How to Add a New Payment Gateway Adapter
 
-The `shared/` directory is the single source of truth for all cross-cutting concerns. It is **not a separate npm package** — services import from it via relative paths:
+Follow this checklist to implement and register a new gateway provider integration:
+
+### Step 6.1 — Create the Adapter File
+Create a new subdirectory and adapter file under `payment-platform-core/src/modules/gateways/`:
+- `[NEW]` [my-gateway.adapter.ts](../payment-platform-core/src/modules/gateways/my-gateway/my-gateway.adapter.ts)
+
+### Step 6.2 — Implement the Gateway Contract
+Your adapter class **must** extend `AbstractPaymentGateway` from `@shared/contracts/abstract-payment-gateway` and implement all abstract methods:
+```typescript
+import { AbstractPaymentGateway } from '@shared/contracts/abstract-payment-gateway';
+import { 
+  CreditCardSaleRequestDto, 
+  PaymentResponseDto,
+  CreditCardAuthorizeRequestDto,
+  CreditCardCaptureRequestDto,
+  CreditCardRefundRequestDto,
+  CreditCardVoidRequestDto,
+  EcheckSaleRequestDto,
+  EcheckRefundRequestDto,
+  EcheckVoidRequestDto
+} from '@shared/dto/gateway.dto';
+
+export class MyGatewayAdapter extends AbstractPaymentGateway {
+  constructor(credentials: Record<string, string>, environment: string, merchantId: string) {
+    super(credentials, environment, merchantId);
+  }
+
+  public async creditCardSale(request: CreditCardSaleRequestDto): Promise<PaymentResponseDto> {
+    this.validateRequest(request);
+    this.auditGatewayRequest('creditCardSale', request);
+
+    try {
+      // Execute network requests using fetch / axios...
+      const mockTxnId = 'txn_' + Math.random().toString(36).substring(7);
+      
+      const response: PaymentResponseDto = {
+        success: true,
+        transactionReference: mockTxnId,
+        responseCode: 'APPROVED',
+        responseMessage: 'Mock approved',
+        rawResponse: '{}'
+      };
+
+      this.auditGatewayResponse('creditCardSale', response);
+      return response;
+    } catch (err: any) {
+      throw this.mapGatewayError('creditCardSale', err);
+    }
+  }
+
+  // Implement the rest of required contract signatures:
+  public async creditCardAuthorize(request: CreditCardAuthorizeRequestDto): Promise<PaymentResponseDto> { ... }
+  public async creditCardCapture(request: CreditCardCaptureRequestDto): Promise<PaymentResponseDto> { ... }
+  public async creditCardRefund(request: CreditCardRefundRequestDto): Promise<PaymentResponseDto> { ... }
+  public async creditCardVoid(request: CreditCardVoidRequestDto): Promise<PaymentResponseDto> { ... }
+  public async echeckSale(request: EcheckSaleRequestDto): Promise<PaymentResponseDto> { ... }
+  public async echeckRefund(request: EcheckRefundRequestDto): Promise<PaymentResponseDto> { ... }
+  public async echeckVoid(request: EcheckVoidRequestDto): Promise<PaymentResponseDto> { ... }
+  public async getTransaction(transactionReference: string): Promise<PaymentResponseDto> { ... }
+}
+```
+
+### Step 6.3 — Register the Adapter in the Factory
+Add the adapter registration to the `GatewayFactory` constructor map:
+- `[MODIFY]` [gateway.factory.ts](../payment-platform-core/src/modules/gateways/factory/gateway.factory.ts)
 
 ```typescript
-// From payment-platform-core (2 levels up):
-import { createLogger } from '../../shared/logger/create-logger';
-import { generateUuidV7 } from '../../shared/ids/generate-uuid-v7';
+import { MyGatewayAdapter } from '../my-gateway/my-gateway.adapter';
 
-// From services/* (4 levels up):
-import { createLogger } from '../../../../shared/logger/create-logger';
-import { generateUuidV7 } from '../../../../shared/ids/generate-uuid-v7';
+constructor() {
+  this.gatewayClassMap.set('STRIPE', StripeGatewayAdapter);
+  this.gatewayClassMap.set('MY_GATEWAY', MyGatewayAdapter); // <-- Add mapping here
+}
 ```
 
-When adding new shared code, place it in the appropriate `shared/` subdirectory. All consumers will automatically pick up the changes since they import by relative path.
-
----
-
-## 8. Running Tests
-
-```bash
-# Unit and integration tests for the core engine
-cd payment-platform-core
-npm run test
-
-# Or from root:
-npm run test:core
+### Step 6.4 — Add Unit Tests
+Create unit tests to verify adapter transformations and mock API error maps:
+- `[NEW]` [my-gateway.adapter.spec.ts](../payment-platform-core/src/modules/gateways/my-gateway/my-gateway.adapter.spec.ts)
+```typescript
+describe('MyGatewayAdapter', () => {
+  it('should process sales successfully', async () => {
+    const adapter = new MyGatewayAdapter({ apiKey: 'key_123' }, 'sandbox', 'm001');
+    const res = await adapter.creditCardSale(mockSaleRequest);
+    expect(res.success).toBe(true);
+  });
+});
 ```
 
----
-
-## 9. Environment Variables Reference
-
-See [`.env.example`](../.env.example) at the repository root for the full list of required environment variables. Key variables:
-
-| Variable | Description |
-|---|---|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `REDIS_URL` | Redis connection string |
-| `KAFKA_BROKERS` | Kafka broker addresses |
-| `ENCRYPTION_MASTER_KEY` | AES-256-GCM master key (base64) |
-| `KAFKA_ENABLED` | `"true"` to enable Kafka publishing |
-| `SMTP_HOST` / `SMTP_PORT` | Email server (MailHog in dev) |
-| `MINIO_ENDPOINT` | MinIO/S3 endpoint for invoice storage |
+### Step 6.5 — Update Documentation and Database Provider Seeds
+- Seed your database `gateway_providers` table with code `MY_GATEWAY`.
+- Update `docs/tech_stack.md` listing the new gateway adapter capabilities.

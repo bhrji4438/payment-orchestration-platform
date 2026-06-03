@@ -1,8 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { createLogger } from '../../../shared/logger/create-logger';
-import { getAnalyticsReport } from './services/reporting.service.ts';
+import { createLogger } from '@shared/logger/create-logger';
+import { getAnalyticsReport } from './services/reporting.service';
 
 dotenv.config();
 

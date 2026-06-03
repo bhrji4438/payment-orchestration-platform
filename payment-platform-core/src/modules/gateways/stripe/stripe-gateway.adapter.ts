@@ -1,4 +1,4 @@
-import { AbstractPaymentGateway } from '../../../../../shared/contracts/abstract-payment-gateway.ts';
+import { AbstractPaymentGateway } from '@shared/contracts/abstract-payment-gateway';
 import {
   CreditCardSaleRequestDto,
   CreditCardAuthorizeRequestDto,
@@ -9,7 +9,7 @@ import {
   EcheckRefundRequestDto,
   EcheckVoidRequestDto,
   PaymentResponseDto
-} from '../../../../../shared/dto/gateway.dto.ts';
+} from '@shared/dto/gateway.dto';
 import axios from 'axios';
 
 export class StripeGatewayAdapter extends AbstractPaymentGateway {
@@ -282,5 +282,62 @@ export class StripeGatewayAdapter extends AbstractPaymentGateway {
       responseMessage: 'ACH void processed successfully (Mock)',
       rawResponse: JSON.stringify({ id: request.transactionReference })
     };
+  }
+
+  public async getTransaction(transactionReference: string): Promise<PaymentResponseDto> {
+    const apiKey = this.credentials.apiKey || 'sk_test_mock';
+    if (apiKey === 'sk_test_mock') {
+      return {
+        success: true,
+        transactionReference,
+        responseCode: '200',
+        responseMessage: 'Succeeded (Mock)',
+        rawResponse: JSON.stringify({ id: transactionReference, status: 'succeeded' })
+      };
+    }
+
+    try {
+      const res = await axios.get(`https://api.stripe.com/v1/payment_intents/${transactionReference}`, {
+        headers: this.getHeaders()
+      });
+      return {
+        success: res.data.status === 'succeeded' || res.data.status === 'requires_capture',
+        transactionReference: res.data.id,
+        responseCode: '200',
+        responseMessage: res.data.status,
+        rawResponse: JSON.stringify(res.data)
+      };
+    } catch (error: any) {
+      throw this.mapGatewayError('getTransaction', error);
+    }
+  }
+
+  public override async verifyWebhook(params: {
+    headers: Record<string, string>;
+    rawBody: string;
+    webhookSecret: string;
+  }): Promise<boolean> {
+    try {
+      const signatureHeader = params.headers['stripe-signature'] || params.headers['Stripe-Signature'];
+      if (!signatureHeader) return false;
+
+      const parts = signatureHeader.split(',');
+      const tPart = parts.find(p => p.startsWith('t='));
+      const v1Part = parts.find(p => p.startsWith('v1='));
+      if (!tPart || !v1Part) return false;
+
+      const timestamp = tPart.split('=')[1];
+      const signature = v1Part.split('=')[1];
+
+      const signedPayload = `${timestamp}.${params.rawBody}`;
+      const { createHmac } = await import('crypto');
+      const expectedSignature = createHmac('sha256', params.webhookSecret)
+        .update(signedPayload)
+        .digest('hex');
+
+      return expectedSignature === signature;
+    } catch {
+      return false;
+    }
   }
 }

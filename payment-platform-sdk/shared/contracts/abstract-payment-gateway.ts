@@ -8,7 +8,7 @@ import {
   EcheckRefundRequestDto,
   EcheckVoidRequestDto,
   PaymentResponseDto
-} from '../dto/gateway.dto.ts';
+} from '../dto/gateway.dto';
 import pino from 'pino';
 
 const logger = pino({

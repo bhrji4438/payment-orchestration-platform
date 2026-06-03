@@ -3,12 +3,29 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "rootDir": "src",
+    "rootDir": "../../",
     "outDir": "dist",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "pino": [
+        "node_modules/pino"
+      ],
+      "zod": [
+        "node_modules/zod"
+      ],
+      "@prisma/client": [
+        "../../payment-platform-core/node_modules/@prisma/client"
+      ],
+      "@shared/*": [
+        "../../shared/*"
+      ]
+    }
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*"
+  ]
 }
