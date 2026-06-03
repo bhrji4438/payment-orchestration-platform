@@ -94,11 +94,11 @@ payment-orchestration-platform/
 ### Option A — Full Platform via Docker (Recommended, zero local Node install needed)
 
 ```bash
-# 1. Copy environment config
-cp .env.example .env
+# 1. Setup environment variables for root and all services
+npm run bootstrap:env
 
 # 2. Start all containers (DB, Kafka, Redis, MinIO, MailHog, all services)
-docker compose up --build
+docker compose up --build -d
 ```
 
 Once running:
@@ -116,17 +116,14 @@ Once running:
 # 1. Start only backing infrastructure
 docker compose up postgres redis kafka mailhog minio -d
 
-# 2. Copy environment templates to root and all service folders
+# 2. Setup environment variables for root and all services
 npm run bootstrap:env
 
 # 3. Install all workspace dependencies
 npm run install:all
 
-# 4. Run DB migrations & seed data (run once)
-cd payment-platform-core
-npx prisma db push
-npm run prisma:seed
-cd ..
+# 4. Push migrations, seed defaults, and generate Prisma Clients
+npm run db:setup
 
 # 5. Start the core engine and portal
 npm run dev:all
@@ -140,7 +137,9 @@ All scripts are defined in the [root package.json](./package.json) and can be ru
 
 | Command | Description |
 |---|---|
-| `npm run install:all` | Runs `npm ci` in every package (core, portal, SDK, all 5 services) |
+| `npm run bootstrap:env` | Safely creates `.env` from `.env.example` in root and all service folders (supports `-- --force` to overwrite) |
+| `npm run db:setup` | Pushes database schema, seeds default configurations, and generates Prisma Clients for all microservices |
+| `npm run install:all` | Runs `npm i` in every package (core, portal, SDK, all 5 services) |
 | `npm run dev:core` | Starts the core payment engine in dev mode |
 | `npm run dev:portal` | Starts the Next.js portal in dev mode |
 | `npm run dev:all` | Starts core + portal concurrently |

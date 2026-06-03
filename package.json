@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "bootstrap:env": "node -e \"const fs = require('fs'); ['.', 'payment-platform-core', 'payment-platform-portal', 'payment-platform-sdk', 'services/audit-service', 'services/invoice-service', 'services/notification-service', 'services/reporting-service', 'services/settlement-service'].forEach(p => { const target = p === '.' ? '.env' : `${p}/.env`; fs.copyFileSync('.env.example', target); console.log(`Copied .env.example to ${target}`); })\"",
+    "bootstrap:env": "node scripts/bootstrap-env.js",
+    "db:setup": "cd payment-platform-core && npx prisma db push && npm run prisma:seed && cd ../services/audit-service && npm run prisma:generate && cd ../invoice-service && npm run prisma:generate && cd ../notification-service && npm run prisma:generate && cd ../reporting-service && npm run prisma:generate && cd ../settlement-service && npm run prisma:generate",
     "install:all": "cd payment-platform-core && npm i && cd ../payment-platform-portal && npm i && cd ../payment-platform-sdk && npm i && cd ../services/audit-service && npm i && cd ../invoice-service && npm i && cd ../notification-service && npm i && cd ../reporting-service && npm i && cd ../settlement-service && npm i",
     "dev:core": "cd payment-platform-core && npm run dev",
     "dev:portal": "cd payment-platform-portal && npm run dev",

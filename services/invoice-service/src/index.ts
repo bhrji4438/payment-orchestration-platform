@@ -1,4 +1,20 @@
 import http from 'http';
+import dotenv from 'dotenv';
+import { validateEnv } from '@shared/validators/env.validator';
+
+dotenv.config();
+
+validateEnv([
+  { name: 'PORT', required: false, type: 'number', default: 3001 },
+  { name: 'DATABASE_URL', required: true, type: 'url' },
+  { name: 'KAFKA_BROKERS', required: true },
+  { name: 'KAFKA_ENABLED', required: false, type: 'boolean', default: true },
+  { name: 'MINIO_ENDPOINT', required: false, type: 'string', default: 'localhost:9000' },
+  { name: 'MINIO_ROOT_USER', required: false, type: 'string', default: 'minioadmin' },
+  { name: 'MINIO_ROOT_PASSWORD', required: false, type: 'string', default: 'minioadmin' },
+  { name: 'MINIO_USE_SSL', required: false, type: 'boolean', default: false }
+], 'invoice-service');
+
 import { startInvoiceConsumer } from './consumers/invoice.consumer';
 import { logger } from '@shared/logger/logger';
 

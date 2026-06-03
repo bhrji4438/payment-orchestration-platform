@@ -5,7 +5,10 @@ const crypto_1 = require("crypto");
 class CredentialEncryptionService {
     masterKey;
     constructor() {
-        const rawKey = process.env.ENCRYPTION_MASTER_KEY || 'cGxhdGZvcm1fbW9kdWxhcl9tb25vbGl0aF9zZWNyZXRfa2V5XzIwMjY=';
+        const rawKey = process.env.ENCRYPTION_MASTER_KEY;
+        if (!rawKey) {
+            throw new Error('FATAL: ENCRYPTION_MASTER_KEY environment variable is not defined.');
+        }
         this.masterKey = Buffer.from(rawKey, 'base64');
         if (this.masterKey.length !== 32) {
             this.masterKey = (0, crypto_1.createHash)('sha256').update(this.masterKey).digest();

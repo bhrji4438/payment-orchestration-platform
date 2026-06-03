@@ -1,4 +1,18 @@
 import http from 'http';
+import dotenv from 'dotenv';
+import { validateEnv } from '@shared/validators/env.validator';
+
+dotenv.config();
+
+validateEnv([
+  { name: 'PORT', required: false, type: 'number', default: 3002 },
+  { name: 'DATABASE_URL', required: true, type: 'url' },
+  { name: 'KAFKA_BROKERS', required: true },
+  { name: 'KAFKA_ENABLED', required: false, type: 'boolean', default: true },
+  { name: 'SMTP_HOST', required: false, type: 'string', default: 'localhost' },
+  { name: 'SMTP_PORT', required: false, type: 'number', default: 1025 }
+], 'notification-service');
+
 import { startNotificationConsumer } from './consumers/notification.consumer';
 import pino from 'pino';
 

@@ -1,14 +1,12 @@
+import './pre-start';
 import express, { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import pino from 'pino';
 import paymentRoutes from './modules/payments/payment.routes';
 import webhookRoutes from './modules/webhooks/webhook.routes';
 import { outboxPublisher } from './infrastructure/outbox/outbox-publisher';
 import { kafkaService } from './infrastructure/kafka/kafka.service';
-
-dotenv.config();
 
 const logger = pino({
   transport: { target: 'pino-pretty' }

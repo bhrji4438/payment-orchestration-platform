@@ -4,7 +4,10 @@ export class CredentialEncryptionService {
   private masterKey: Buffer;
 
   constructor() {
-    const rawKey = process.env.ENCRYPTION_MASTER_KEY || 'cGxhdGZvcm1fbW9kdWxhcl9tb25vbGl0aF9zZWNyZXRfa2V5XzIwMjY=';
+    const rawKey = process.env.ENCRYPTION_MASTER_KEY;
+    if (!rawKey) {
+      throw new Error('FATAL: ENCRYPTION_MASTER_KEY environment variable is not defined.');
+    }
     this.masterKey = Buffer.from(rawKey, 'base64');
     
     if (this.masterKey.length !== 32) {

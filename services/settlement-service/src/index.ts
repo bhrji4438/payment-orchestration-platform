@@ -1,4 +1,14 @@
 import http from 'http';
+import dotenv from 'dotenv';
+import { validateEnv } from '@shared/validators/env.validator';
+
+dotenv.config();
+
+validateEnv([
+  { name: 'PORT', required: false, type: 'number', default: 3004 },
+  { name: 'DATABASE_URL', required: true, type: 'url' }
+], 'settlement-service');
+
 import { runReconciliation } from './services/settlement.service';
 import { createLogger } from '@shared/logger/create-logger';
 

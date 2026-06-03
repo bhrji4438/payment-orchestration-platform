@@ -64,39 +64,35 @@ KAFKA_ENABLED="true"
 ### Option A — Full Platform via Docker (Recommended)
 Easiest setup requiring zero local Node modules installation:
 ```bash
-# 1. Copy config files
-cp .env.example .env
+# 1. Setup environment variables for root and all services
+npm run bootstrap:env
 
 # 2. Build and boot all containers
-docker compose up --build
+docker compose up --build -d
 ```
 
 ### Option B — Local Node.js Development
 Best for active hot-reloads and rapid TypeScript debugging:
 ```bash
-# 1. Boot infrastructure backing containers
-docker compose up postgres redis kafka mailhog minio -d
-
-# 2. Copy config templates to root and all package subfolders (single command)
+# 1. Setup environment variables for root and all services
 npm run bootstrap:env
 
-# (Note: Edit individual .env files if needed, changing hosts like 'postgres' to 'localhost' for local network execution)
+# 2. Boot infrastructure backing containers (DB, cache, message broker)
+docker compose up postgres redis kafka mailhog minio -d
 
 # 3. Install dependencies across the monorepo workspace
 npm run install:all
 
-# 4. Push schema migrations and seed defaults (monolith folder)
-cd payment-platform-core
-npx prisma db push
-npm run prisma:seed
-cd ..
+# 4. Push database migrations, seed defaults, and generate Prisma clients
+npm run db:setup
 
-# 5. Generate Prisma Client for microservices
-cd services/audit-service && npx prisma generate && cd ../..
-cd services/invoice-service && npx prisma generate && cd ../..
-
-# 6. Start the monolith and front-end portal
+# 5. Start the monolith and front-end portal
 npm run dev:all
+```
+
+To overwrite existing `.env` files with example defaults at any time, use the `--force` flag:
+```bash
+npm run bootstrap:env -- --force
 ```
 
 ---

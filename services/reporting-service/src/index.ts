@@ -3,8 +3,14 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { createLogger } from '@shared/logger/create-logger';
 import { getAnalyticsReport } from './services/reporting.service';
+import { validateEnv } from '@shared/validators/env.validator';
 
 dotenv.config();
+
+validateEnv([
+  { name: 'PORT', required: false, type: 'number', default: 3005 },
+  { name: 'DATABASE_URL', required: true, type: 'url' }
+], 'reporting-service');
 
 const app = express();
 const port = process.env.PORT || 3005;
