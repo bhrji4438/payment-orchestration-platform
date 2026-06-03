@@ -17,11 +17,12 @@ export async function createInvoice(paymentData: { paymentId: string; merchantId
     logger.info({ paymentId }, 'Generating invoice for captured payment');
 
     const invoiceNumber = `INV-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    const pdfUrl = `https://paymentplatform-invoices.s3.amazonaws.com/${invoiceNumber}.pdf`;
+    const invoiceId = generateUuidV7();
+    const pdfUrl = `http://localhost:3001/v1/invoices/${invoiceId}/print`;
 
     const invoice = await prisma.invoice.create({
       data: {
-        id: generateUuidV7(),
+        id: invoiceId,
         merchantId,
         paymentId,
         number: invoiceNumber,

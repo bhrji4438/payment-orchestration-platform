@@ -5,8 +5,13 @@ import cors from 'cors';
 import pino from 'pino';
 import paymentRoutes from './modules/payments/payment.routes';
 import webhookRoutes from './modules/webhooks/webhook.routes';
+import authRoutes from './modules/auth/auth.routes';
+import apiKeyRoutes from './modules/api-keys/api-key.routes';
+import gatewayRoutes from './modules/gateways/gateway.routes';
+import customerRoutes from './modules/customers/customer.routes';
 import { outboxPublisher } from './infrastructure/outbox/outbox-publisher';
 import { kafkaService } from './infrastructure/kafka/kafka.service';
+import { redisService } from './infrastructure/redis/redis.service';
 
 const logger = pino({
   transport: { target: 'pino-pretty' }
@@ -34,7 +39,11 @@ app.get('/health', (req, res) => {
 });
 
 // Register routers
+app.use('/v1/auth', authRoutes);
+app.use('/v1/api-keys', apiKeyRoutes);
+app.use('/v1/gateways', gatewayRoutes);
 app.use('/v1', paymentRoutes);
+app.use('/v1', customerRoutes);
 app.use('/webhooks', webhookRoutes);
 
 // Global Error Handler
@@ -56,13 +65,16 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 async function startServer() {
   logger.info('Initializing Payment Orchestrator Platform...');
 
-  // 1. Connect to Kafka
+  // 1. Connect to Redis (cache, rate limiting, circuit breaker state)
+  await redisService.connect();
+
+  // 2. Connect to Kafka
   await kafkaService.connect();
 
-  // 2. Start Transactional Outbox Publisher worker
+  // 3. Start Transactional Outbox Publisher worker
   outboxPublisher.start(5000);
 
-  // 3. Listen
+  // 4. Listen
   app.listen(port, () => {
     logger.info(`Server is running in ${process.env.NODE_ENV || 'development'} mode on port ${port}`);
   });
@@ -78,5 +90,6 @@ process.on('SIGTERM', async () => {
   logger.info('SIGTERM received. Shutting down gracefully...');
   outboxPublisher.stop();
   await kafkaService.disconnect();
+  await redisService.disconnect();
   process.exit(0);
 });

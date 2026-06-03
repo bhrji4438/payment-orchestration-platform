@@ -1,9 +1,21 @@
-import { uow } from '../../infrastructure/database/uow';
-import { prisma } from '../../infrastructure/database/prisma';
-import { gatewayFactory } from '../gateways/factory/gateway.factory';
-import { CircuitBreaker } from '../gateways/circuit-breaker';
+import { uow } from '@core/infrastructure/database/uow';
+import { prisma } from '@core/infrastructure/database/prisma';
+import { gatewayFactory } from '@core/modules/gateways/factory/gateway.factory';
+import { CircuitBreaker } from '@core/modules/gateways/circuit-breaker';
 import { generateUuidV7 } from '@shared/ids/generate-uuid-v7';
 import { logger } from '@shared/logger/logger';
+
+function redactCardData(rawResponse: string | undefined): string | undefined {
+  if (!rawResponse) return rawResponse;
+  let redacted = rawResponse;
+  // Redact PANs (13-19 digits)
+  redacted = redacted.replace(/(?:"number"\s*:\s*"?|\b)(\d{13,19})(?:"?|\b)/g, (match, p1) => {
+    return match.replace(p1, `${p1.substring(0, 6)}******${p1.substring(p1.length - 4)}`);
+  });
+  // Redact CVCs (3-4 digits) near cvc/cvv keys
+  redacted = redacted.replace(/("(?:cvc|cvv|security_code)"\s*:\s*")(\d{3,4})(")/gi, '$1***$3');
+  return redacted;
+}
 
 export class PaymentService {
   public async createPayment(params: {
@@ -106,7 +118,7 @@ export class PaymentService {
               gatewayTxnId: gatewayResult.transactionReference || null,
               responseCode: gatewayResult.responseCode || null,
               responseMessage: gatewayResult.responseMessage || null,
-              rawResponse: gatewayResult.rawResponse
+              rawResponse: redactCardData(gatewayResult.rawResponse)
             }
           });
 
@@ -230,7 +242,7 @@ export class PaymentService {
           gatewayTxnId: gatewayResult.transactionReference || null,
           responseCode: gatewayResult.responseCode || null,
           responseMessage: gatewayResult.responseMessage || null,
-          rawResponse: gatewayResult.rawResponse
+          rawResponse: redactCardData(gatewayResult.rawResponse)
         }
       });
 

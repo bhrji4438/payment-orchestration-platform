@@ -26,4 +26,4 @@ COPY --from=builder /app/services/settlement-service/dist ./dist
 RUN npx prisma generate
 
 EXPOSE 3004
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/services/settlement-service/src/index.js"]

@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { gatewayFactory } from '../gateways/factory/gateway.factory';
-import { kafkaService } from '../../infrastructure/kafka/kafka.service';
+import { gatewayFactory } from '@core/modules/gateways/factory/gateway.factory';
+import { kafkaService } from '@core/infrastructure/kafka/kafka.service';
 import { generateUuidV7 } from '@shared/ids/generate-uuid-v7';
 import { logger } from '@shared/logger/logger';
-import { prisma } from '../../infrastructure/database/prisma';
+import { prisma } from '@core/infrastructure/database/prisma';
 const router = Router();
 
 async function handleWebhook(

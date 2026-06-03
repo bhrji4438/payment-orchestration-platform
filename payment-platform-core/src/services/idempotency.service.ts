@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { generateUuidV7 } from '@shared/ids/generate-uuid-v7';
-import { prisma } from '../infrastructure/database/prisma';
+import { prisma } from '@core/infrastructure/database/prisma';
 
 export interface IdempotencyResult {
   isReplay: boolean;

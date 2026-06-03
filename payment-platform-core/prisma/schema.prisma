@@ -14,15 +14,18 @@ model User {
   name      String
   roleId    String    @db.Uuid
   role      Role      @relation(fields: [roleId], references: [id])
-  
+  isActive  Boolean   @default(true)
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
   createdBy String?
   updatedBy String?
 
-  merchantUsers MerchantUser[]
-  auditLogs     AuditLog[]
+  merchantUsers       MerchantUser[]
+  auditLogs           AuditLog[]
+  sessions            Session[]
+  passwordResetTokens PasswordResetToken[]
 
   @@map("users")
 }
@@ -114,8 +117,14 @@ model Customer {
   merchantId String   @db.Uuid
   merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   email      String
-  name       String?
+  firstName  String?
+  lastName   String?
+  companyName String?
   phone      String?
+  mobilePhone String?
+  billingAddress Json?
+  shippingAddress Json?
+  isActive   Boolean  @default(true)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -496,4 +505,36 @@ model EventStore {
 
   @@index([aggregateType, aggregateId])
   @@map("event_store")
+}
+
+model Session {
+  id           String   @id @db.Uuid
+  userId       String   @db.Uuid
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshToken String   @unique @db.Text
+  expiresAt    DateTime
+  ipAddress    String?
+  userAgent    String?  @db.Text
+  revokedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model PasswordResetToken {
+  id        String   @id @db.Uuid
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }

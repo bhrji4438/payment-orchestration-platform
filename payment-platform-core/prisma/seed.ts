@@ -33,8 +33,8 @@ async function main() {
   await prisma.merchant.deleteMany({});
 
   // 2. Roles & Permissions
-  const adminRoleId = '70000000-0000-0000-0000-000000000000';
-  const merchantRoleId = '80000000-0000-0000-0000-000000000000';
+  const adminRoleId = generateUuidV7();
+  const merchantRoleId = generateUuidV7();
 
   await prisma.role.createMany({
     data: [
@@ -62,10 +62,10 @@ async function main() {
   }
 
   // 3. Create Gateway Providers
-  const stripeProviderId = '11111111-1111-1111-1111-111111111111';
-  const authNetProviderId = '22222222-2222-2222-2222-222222222222';
-  const nmiProviderId = '33333333-3333-3333-3333-333333333333';
-  const cardpointeProviderId = '44444444-4444-4444-4444-444444444444';
+  const stripeProviderId = generateUuidV7();
+  const authNetProviderId = generateUuidV7();
+  const nmiProviderId = generateUuidV7();
+  const cardpointeProviderId = generateUuidV7();
 
   await prisma.gatewayProvider.createMany({
     data: [
@@ -77,8 +77,8 @@ async function main() {
   });
 
   // 4. Create Merchants
-  const merchantAId = 'a0000000-0000-0000-0000-00000000000a';
-  const merchantBId = 'b0000000-0000-0000-0000-00000000000b';
+  const merchantAId = generateUuidV7();
+  const merchantBId = generateUuidV7();
 
   await prisma.merchant.createMany({
     data: [
@@ -95,7 +95,7 @@ async function main() {
     JSON.stringify({ loginId: 'mock_login_id', transactionKey: 'mock_trans_key', environment: 'SANDBOX' })
   );
   const nmiCreds = credentialEncryptionService.encrypt(
-    JSON.stringify({ securityKey: 'mock_security_key', environment: 'SANDBOX' })
+    JSON.stringify({ username: 'demo', password: 'password', environment: 'SANDBOX' })
   );
   const cardpointeCreds = credentialEncryptionService.encrypt(
     JSON.stringify({
@@ -107,11 +107,14 @@ async function main() {
     })
   );
 
+  // Gateway config IDs stored for FK reference in demo payment below
+  const gatewayConfigAStripeId = generateUuidV7();
+
   await prisma.merchantGatewayConfiguration.createMany({
     data: [
       // Merchant A
       {
-        id: 'a1111111-1111-1111-1111-111111111111',
+        id: gatewayConfigAStripeId,
         merchantId: merchantAId,
         gatewayProviderId: stripeProviderId,
         displayName: 'Stripe Primary Sandbox',
@@ -121,7 +124,7 @@ async function main() {
         environment: 'SANDBOX'
       },
       {
-        id: 'a2222222-2222-2222-2222-222222222222',
+        id: generateUuidV7(),
         merchantId: merchantAId,
         gatewayProviderId: authNetProviderId,
         displayName: 'Authorize.Net Failover',
@@ -131,7 +134,7 @@ async function main() {
         environment: 'SANDBOX'
       },
       {
-        id: 'a3333333-3333-3333-3333-333333333333',
+        id: generateUuidV7(),
         merchantId: merchantAId,
         gatewayProviderId: nmiProviderId,
         displayName: 'NMI Tertiary Failover',
@@ -142,7 +145,7 @@ async function main() {
       },
       // Merchant B
       {
-        id: 'b1111111-1111-1111-1111-111111111111',
+        id: generateUuidV7(),
         merchantId: merchantBId,
         gatewayProviderId: stripeProviderId,
         displayName: 'Stripe Sandbox',
@@ -152,7 +155,7 @@ async function main() {
         environment: 'SANDBOX'
       },
       {
-        id: 'b4444444-4444-4444-4444-444444444444',
+        id: generateUuidV7(),
         merchantId: merchantBId,
         gatewayProviderId: cardpointeProviderId,
         displayName: 'Cardpointe Gateway',
@@ -186,13 +189,13 @@ async function main() {
   });
 
   // 7. Customers
-  const customerIdA = 'c0000000-0000-0000-0000-00000000000a';
-  const customerIdB = 'c0000000-0000-0000-0000-00000000000b';
+  const customerIdA = generateUuidV7();
+  const customerIdB = generateUuidV7();
 
   await prisma.customer.createMany({
     data: [
-      { id: customerIdA, merchantId: merchantAId, email: 'john.doe@gmail.com', name: 'John Doe', phone: '+1234567890' },
-      { id: customerIdB, merchantId: merchantBId, email: 'jane.smith@yahoo.com', name: 'Jane Smith', phone: '+9876543210' }
+      { id: customerIdA, merchantId: merchantAId, email: 'john.doe@gmail.com', firstName: 'John', lastName: 'Doe', phone: '+1234567890' },
+      { id: customerIdB, merchantId: merchantBId, email: 'jane.smith@yahoo.com', firstName: 'Jane', lastName: 'Smith', phone: '+9876543210' }
     ]
   });
 
@@ -227,13 +230,13 @@ async function main() {
   });
 
   // 9. Demo Transactions & Invoices
-  const paymentId = 'p0000000-0000-0000-0000-00000000000a';
+  const paymentId = generateUuidV7();
   await prisma.payment.create({
     data: {
       id: paymentId,
       merchantId: merchantAId,
       customerId: customerIdA,
-      gatewayConfigId: 'a1111111-1111-1111-1111-111111111111',
+      gatewayConfigId: gatewayConfigAStripeId,
       amount: 150.00,
       currency: 'USD',
       status: 'CAPTURED',
@@ -248,7 +251,7 @@ async function main() {
     data: {
       id: generateUuidV7(),
       paymentId,
-      gatewayConfigId: 'a1111111-1111-1111-1111-111111111111',
+      gatewayConfigId: gatewayConfigAStripeId,
       action: 'SALE',
       amount: 150.00,
       status: 'SUCCESS',

@@ -25,4 +25,4 @@ COPY --from=builder /app/payment-platform-core/prisma ./prisma
 RUN npx prisma generate
 
 EXPOSE 3000
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/payment-platform-core/src/index.js"]

@@ -169,3 +169,14 @@ For detailed guidelines and technical specifications, refer to the following doc
 - **[Local Development Guide](./docs/local_development.md)**: Booting options, credential setups, merchant onboarding workflow, and adding a new payment gateway adapter step-by-step.
 - **[Production Deployment & Infrastructure Guide](./docs/deployment.md)**: Multi-stage Docker configurations, AWS ECS/Fargate deployment topologies, Kubernetes manifests, and CI/CD GitOps pipelines.
 - **[Incident Response & Operations Runbooks](./docs/runbooks.md)**: Disaster recovery procedures, troubleshooting guides (Kafka lag, Redis down, database locks, MinIO/MailHog issues).
+
+---
+
+## 6. AI Development & Governance
+
+This repository strictly enforces engineering standards for all AI coding agents (Claude, Copilot, Cursor, Antigravity, etc.). 
+
+- **Single Source of Truth**: The [`AGENTS.md`](./AGENTS.md) file at the root of the repository is the authoritative configuration for all AI agents.
+- **Workflow**: Before making any code modifications, AI agents are instructed to read `AGENTS.md` and strictly adhere to the repository's architecture, path aliases, and shared library patterns.
+- **Enforcement**: Any AI-generated code that bypasses existing architecture, hardcodes data, or duplicates existing shared utilities will be considered invalid. 
+- **Tool-Specific Configs**: Files like `CLAUDE.md`, `.github/copilot-instructions.md`, and `.cursor/rules/project.mdc` are lightweight pointers that refer back to `AGENTS.md`.

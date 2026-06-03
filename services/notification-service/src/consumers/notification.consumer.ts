@@ -34,11 +34,21 @@ export async function startNotificationConsumer() {
           if (!message.value) return;
           const payload = JSON.parse(message.value.toString());
 
+          let recipient = 'customer@demo-domain.com';
+          if (payload.customerId) {
+            const customer = await prisma.customer.findUnique({
+              where: { id: payload.customerId }
+            });
+            if (customer && customer.email) {
+              recipient = customer.email;
+            }
+          }
+
           // Trigger email or SMS depending on payload type (simulate customer contact settings)
           await processNotification({
             merchantId: payload.merchantId,
             type: 'EMAIL',
-            recipient: 'customer@demo-domain.com', // Simulate lookup
+            recipient,
             payload: { topic, payload }
           });
         }
@@ -70,16 +80,26 @@ function startFallbackPolling() {
         const payload = JSON.parse(event.payload);
         const merchantId = payload.merchantId || 'a0000000-0000-0000-0000-00000000000a';
 
+        let recipient = 'customer@demo-domain.com';
+        if (payload.customerId) {
+          const customer = await prisma.customer.findUnique({
+            where: { id: payload.customerId }
+          });
+          if (customer && customer.email) {
+            recipient = customer.email;
+          }
+        }
+
         // Check if we already created a notification for this event key
         const exists = await prisma.notification.findFirst({
-          where: { recipient: 'customer@demo-domain.com', payload: { contains: event.key || '' } }
+          where: { recipient, payload: { contains: event.key || '' } }
         });
 
         if (!exists) {
           await processNotification({
             merchantId,
             type: 'EMAIL',
-            recipient: 'customer@demo-domain.com',
+            recipient,
             payload: { topic: event.topic, payload }
           });
         }

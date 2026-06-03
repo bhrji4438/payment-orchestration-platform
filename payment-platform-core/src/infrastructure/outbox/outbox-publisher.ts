@@ -1,6 +1,6 @@
-import { kafkaService } from '../kafka/kafka.service';
+import { kafkaService } from '@core/infrastructure/kafka/kafka.service';
 import { logger } from '@shared/logger/logger';
-import { prisma } from '../database/prisma';
+import { prisma } from '@core/infrastructure/database/prisma';
 
 export class OutboxPublisher {
   private isRunning = false;

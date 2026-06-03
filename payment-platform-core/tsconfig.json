@@ -13,7 +13,11 @@
     "paths": {
       "pino": ["node_modules/pino"],
       "zod": ["node_modules/zod"],
-      "@shared/*": ["../shared/*"]
+      "@shared/*": ["../shared/*"],
+      "@core/*": ["./src/*"],
+      "@modules/*": ["./src/modules/*"],
+      "@services/*": ["./src/services/*"],
+      "@infrastructure/*": ["./src/infrastructure/*"]
     }
   },
   "include": ["src/**/*", "prisma/**/*.ts"]

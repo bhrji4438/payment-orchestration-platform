@@ -1,8 +1,8 @@
 import { Router, Response } from 'express';
-import { prisma } from '../../infrastructure/database/prisma';
-import { authMiddleware, AuthenticatedRequest } from '../auth/auth.middleware';
-import { idempotencyMiddleware } from '../../middleware/idempotency.middleware';
-import { validateBody } from '../../middleware/validation.middleware';
+import { prisma } from '@core/infrastructure/database/prisma';
+import { authMiddleware, AuthenticatedRequest } from '@core/modules/auth/auth.middleware';
+import { idempotencyMiddleware } from '@core/middleware/idempotency.middleware';
+import { validateBody } from '@core/middleware/validation.middleware';
 import {
   CreatePaymentSchema,
   CapturePaymentSchema,
@@ -97,6 +97,70 @@ router.post(
     }
   }
 );
+
+router.get('/payments', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const { status, search, limit = 50, cursor } = req.query;
+
+    const where: any = {
+      merchantId: req.merchantId!,
+      deletedAt: null
+    };
+
+    if (status) {
+      where.status = status as string;
+    }
+
+    if (search) {
+      const searchStr = search as string;
+      where.OR = [
+        { id: { contains: searchStr, mode: 'insensitive' } },
+        { cardLastFour: { contains: searchStr } }
+      ];
+    }
+
+    const take = Number(limit);
+    
+    const payments = await prisma.payment.findMany({
+      where,
+      take: take + 1, // Fetch 1 extra to check if there is a next page
+      ...(cursor && {
+        skip: 1,
+        cursor: { id: cursor as string }
+      }),
+      orderBy: { createdAt: 'desc' },
+      include: {
+        gatewayConfig: {
+          include: { gatewayProvider: true }
+        }
+      }
+    });
+
+    let nextCursor: string | null = null;
+    if (payments.length > take) {
+      const nextItem = payments.pop();
+      nextCursor = nextItem!.id;
+    }
+
+    const formatted = payments.map((p) => ({
+      id: p.id,
+      amount: Number(p.amount),
+      currency: p.currency,
+      status: p.status,
+      cardBrand: p.cardBrand,
+      cardLastFour: p.cardLastFour,
+      gateway: p.gatewayConfig?.gatewayProvider.name || 'Direct',
+      createdAt: p.createdAt
+    }));
+
+    res.json({
+      data: formatted,
+      nextCursor
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 router.get('/payments/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {

@@ -1,10 +1,19 @@
 import { PrismaClient } from '@prisma/client';
 import { createLogger } from '@shared/logger/create-logger';
+import { redisService } from '../infrastructure/redis/redis.service';
 
 const prisma = new PrismaClient();
 const logger = createLogger('reporting-service');
 
 export async function getAnalyticsReport(merchantId: string) {
+  // Check cache first
+  const cacheKey = `analytics:${merchantId}`;
+  const cached = await redisService.get<any>(cacheKey);
+  if (cached) {
+    logger.info({ merchantId }, 'Analytics cache hit');
+    return cached;
+  }
+
   // Check merchant exists
   const merchant = await prisma.merchant.findUnique({
     where: { id: merchantId }
@@ -104,7 +113,7 @@ export async function getAnalyticsReport(merchantId: string) {
     }
   });
 
-  return {
+  const report = {
     summary: {
       totalVolume,
       totalRefunded,
@@ -132,4 +141,9 @@ export async function getAnalyticsReport(merchantId: string) {
       createdAt: p.createdAt
     }))
   };
+
+  // Cache report for 30 seconds
+  await redisService.setex(cacheKey, 30, report);
+
+  return report;
 }

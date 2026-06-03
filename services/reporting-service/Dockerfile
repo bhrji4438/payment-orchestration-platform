@@ -26,4 +26,4 @@ COPY --from=builder /app/services/reporting-service/dist ./dist
 RUN npx prisma generate
 
 EXPOSE 3005
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/services/reporting-service/src/index.js"]

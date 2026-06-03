@@ -1,10 +1,10 @@
 {
   "name": "audit-service",
   "version": "1.0.0",
-  "main": "dist/index.js",
+  "main": "dist/services/audit-service/src/index.js",
   "scripts": {
     "build": "tsc && tsc-alias",
-    "start": "node dist/index.js",
+    "start": "node dist/services/audit-service/src/index.js",
     "dev": "ts-node-dev -r tsconfig-paths/register --respawn --transpile-only src/index.ts",
     "prisma:generate": "prisma generate --schema=../../payment-platform-core/prisma/schema.prisma"
   },

@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { createLogger } from '@shared/logger/create-logger';
 import { getAnalyticsReport } from './services/reporting.service';
 import { validateEnv } from '@shared/validators/env.validator';
+import { redisService } from './infrastructure/redis/redis.service';
 
 dotenv.config();
 
@@ -42,6 +43,13 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'UP', service: 'reporting-service', timestamp: new Date() });
 });
 
-app.listen(port, () => {
+app.listen(port, async () => {
+  await redisService.connect();
   logger.info(`Reporting analytics service running on port ${port}`);
+});
+
+process.on('SIGTERM', async () => {
+  logger.info('SIGTERM received. Shutting down gracefully...');
+  await redisService.disconnect();
+  process.exit(0);
 });

@@ -17,13 +17,33 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
     return 'https://secure.networkmerchants.com/api/transact.php';
   }
 
+  /**
+   * NMI supports two authentication methods:
+   *   1. security_key  – single API key (production / key-based sandbox)
+   *   2. username + password – direct-post credentials (public demo sandbox)
+   * This helper appends whichever set of credentials is present.
+   */
+  private buildAuthParams(params: URLSearchParams): void {
+    const { securityKey, username, password } = this.credentials;
+    if (username && password) {
+      params.append('username', username);
+      params.append('password', password);
+    } else {
+      params.append('security_key', securityKey || '');
+    }
+  }
+
+  /** Returns true when no real credentials are configured (mock mode). */
+  private isMockMode(): boolean {
+    const { securityKey, username } = this.credentials;
+    return !securityKey && !username;
+  }
+
   public async creditCardSale(request: CreditCardSaleRequestDto): Promise<PaymentResponseDto> {
     this.validateRequest(request);
     this.auditGatewayRequest('creditCardSale', request);
 
-    const securityKey = this.credentials.securityKey || 'mock_security_key';
-
-    if (securityKey === 'mock_security_key') {
+    if (this.isMockMode()) {
       const mockRefId = 'nmi_' + Math.floor(Math.random() * 10000000);
       const response = {
         success: true,
@@ -39,7 +59,7 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
     }
 
     const params = new URLSearchParams();
-    params.append('security_key', securityKey);
+    this.buildAuthParams(params);
     params.append('type', 'sale');
     params.append('amount', request.amount.toFixed(2));
     params.append('currency', request.currency);
@@ -74,9 +94,7 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
     this.validateRequest(request);
     this.auditGatewayRequest('creditCardAuthorize', request);
 
-    const securityKey = this.credentials.securityKey || 'mock_security_key';
-
-    if (securityKey === 'mock_security_key') {
+    if (this.isMockMode()) {
       const mockRefId = 'nmi_' + Math.floor(Math.random() * 10000000);
       const response = {
         success: true,
@@ -92,7 +110,7 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
     }
 
     const params = new URLSearchParams();
-    params.append('security_key', securityKey);
+    this.buildAuthParams(params);
     params.append('type', 'auth');
     params.append('amount', request.amount.toFixed(2));
     params.append('currency', request.currency);
@@ -127,9 +145,7 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
     this.validateRequest(request);
     this.auditGatewayRequest('creditCardCapture', request);
 
-    const securityKey = this.credentials.securityKey || 'mock_security_key';
-
-    if (securityKey === 'mock_security_key') {
+    if (this.isMockMode()) {
       const response = {
         success: true,
         transactionReference: request.transactionReference,
@@ -142,7 +158,7 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
     }
 
     const params = new URLSearchParams();
-    params.append('security_key', securityKey);
+    this.buildAuthParams(params);
     params.append('type', 'capture');
     params.append('transactionid', request.transactionReference);
     params.append('amount', request.amount.toFixed(2));
@@ -170,9 +186,7 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
     this.validateRequest(request);
     this.auditGatewayRequest('creditCardRefund', request);
 
-    const securityKey = this.credentials.securityKey || 'mock_security_key';
-
-    if (securityKey === 'mock_security_key') {
+    if (this.isMockMode()) {
       const mockRefId = 'refund_nmi_' + Math.floor(Math.random() * 10000000);
       const response = {
         success: true,
@@ -186,7 +200,7 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
     }
 
     const params = new URLSearchParams();
-    params.append('security_key', securityKey);
+    this.buildAuthParams(params);
     params.append('type', 'refund');
     params.append('transactionid', request.transactionReference);
     params.append('amount', request.amount.toFixed(2));
@@ -214,9 +228,7 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
     this.validateRequest(request);
     this.auditGatewayRequest('creditCardVoid', request);
 
-    const securityKey = this.credentials.securityKey || 'mock_security_key';
-
-    if (securityKey === 'mock_security_key') {
+    if (this.isMockMode()) {
       const response = {
         success: true,
         transactionReference: request.transactionReference,
@@ -229,7 +241,7 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
     }
 
     const params = new URLSearchParams();
-    params.append('security_key', securityKey);
+    this.buildAuthParams(params);
     params.append('type', 'void');
     params.append('transactionid', request.transactionReference);
 
@@ -291,9 +303,7 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
   }
 
   public async getTransaction(transactionReference: string): Promise<PaymentResponseDto> {
-    const securityKey = this.credentials.securityKey || 'mock_security_key';
-
-    if (securityKey === 'mock_security_key') {
+    if (this.isMockMode()) {
       return {
         success: true,
         transactionReference,
@@ -304,7 +314,7 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
     }
 
     const params = new URLSearchParams();
-    params.append('security_key', securityKey);
+    this.buildAuthParams(params);
     params.append('report_type', 'transaction_detail');
     params.append('transaction_id', transactionReference);
 

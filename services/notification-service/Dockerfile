@@ -26,4 +26,4 @@ COPY --from=builder /app/services/notification-service/dist ./dist
 RUN npx prisma generate
 
 EXPOSE 3002
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/services/notification-service/src/index.js"]

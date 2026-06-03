@@ -1,10 +1,10 @@
 import { AbstractPaymentGateway } from '@shared/contracts/abstract-payment-gateway';
-import { StripeGatewayAdapter } from '../stripe/stripe-gateway.adapter';
-import { AuthorizeNetGatewayAdapter } from '../authorize-net/authorize-net-gateway.adapter';
-import { NmiGatewayAdapter } from '../nmi/nmi-gateway.adapter';
-import { CardpointeGatewayAdapter } from '../cardpointe/cardpointe-gateway.adapter';
+import { StripeGatewayAdapter } from '@core/modules/gateways/stripe/stripe-gateway.adapter';
+import { AuthorizeNetGatewayAdapter } from '@core/modules/gateways/authorize-net/authorize-net-gateway.adapter';
+import { NmiGatewayAdapter } from '@core/modules/gateways/nmi/nmi-gateway.adapter';
+import { CardpointeGatewayAdapter } from '@core/modules/gateways/cardpointe/cardpointe-gateway.adapter';
 import { credentialEncryptionService } from '@shared/crypto/credential-encryption';
-import { prisma } from '../../../infrastructure/database/prisma';
+import { prisma } from '@core/infrastructure/database/prisma';
 
 export class GatewayFactory {
   private gatewayClassMap: Map<string, any> = new Map();

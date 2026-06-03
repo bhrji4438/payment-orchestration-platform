@@ -1,41 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
 import { createHash } from 'crypto';
 import { generateUuidV7 } from '@shared/ids/generate-uuid-v7';
-import { prisma } from '../../infrastructure/database/prisma';
+import { prisma } from '@core/infrastructure/database/prisma';
+import { redisService } from '@core/infrastructure/redis/redis.service';
+import { logger } from '@shared/logger/logger';
+import { jwtMiddleware } from './jwt.middleware';
 
-// --- Step 5: Size-Bounded LRU Cache to Prevent Memory Leaks ---
-class SizeBoundedCache<K, V> {
-  private cache = new Map<K, V>();
+// ─── Key Patterns ──────────────────────────────────────────────────────────────
+const APIKEY_CACHE_PREFIX = 'apikey:';
+const RATE_LIMIT_PREFIX = 'ratelimit:';
+const APIKEY_CACHE_TTL = 300;    // 5 minutes
+const RATE_LIMIT_WINDOW = 60;    // 1 minute
+const RATE_LIMIT_MAX = 100;      // 100 requests per minute per key
 
-  constructor(private readonly maxSize: number) {}
-
-  public get(key: K): V | undefined {
-    const value = this.cache.get(key);
-    if (value !== undefined) {
-      // Refresh key by deleting and re-inserting (moves to end of insertion order)
-      this.cache.delete(key);
-      this.cache.set(key, value);
-    }
-    return value;
-  }
-
-  public set(key: K, value: V): void {
-    if (this.cache.has(key)) {
-      this.cache.delete(key);
-    } else if (this.cache.size >= this.maxSize) {
-      // Evict oldest element (first key in map iterator)
-      const oldestKey = this.cache.keys().next().value;
-      if (oldestKey !== undefined) {
-        this.cache.delete(oldestKey);
-      }
-    }
-    this.cache.set(key, value);
-  }
-}
-
-const apiKeyCache = new SizeBoundedCache<string, { merchantId: string; apiKeyId: string }>(10000);
-
-// --- Step 6: Buffered Usage Logger to Prevent Database Saturation ---
+// ─── Buffered Usage Logger (prevents DB saturation) ───────────────────────────
 interface ApiKeyUsageEntry {
   id: string;
   apiKeyId: string;
@@ -47,8 +25,6 @@ interface ApiKeyUsageEntry {
 
 class ApiKeyUsageLogger {
   private buffer: ApiKeyUsageEntry[] = [];
-  private flushInterval = 5000; // 5 seconds
-  private batchSize = 100;
   private timer: NodeJS.Timeout | null = null;
 
   constructor() {
@@ -57,21 +33,16 @@ class ApiKeyUsageLogger {
 
   public log(entry: Omit<ApiKeyUsageEntry, 'createdAt'>) {
     this.buffer.push({ ...entry, createdAt: new Date() });
-    if (this.buffer.length >= this.batchSize) {
-      this.flush();
-    }
+    if (this.buffer.length >= 100) this.flush();
   }
 
   public start() {
     if (this.timer) return;
-    this.timer = setInterval(() => this.flush(), this.flushInterval);
+    this.timer = setInterval(() => this.flush(), 5000);
   }
 
   public stop() {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
     this.flush();
   }
 
@@ -79,27 +50,27 @@ class ApiKeyUsageLogger {
     if (this.buffer.length === 0) return;
     const batch = [...this.buffer];
     this.buffer = [];
-
-    try {
-      await prisma.apiKeyUsage.createMany({
-        data: batch
-      });
-    } catch (err) {
-      console.error('Failed to flush API key usage batch:', err);
-    }
+    await prisma.apiKeyUsage.createMany({ data: batch }).catch((err) => {
+      logger.error({ err: err.message }, 'Failed to flush API key usage batch');
+    });
   }
 }
 
 export const apiKeyUsageLogger = new ApiKeyUsageLogger();
 
+// ─── Authenticated Request ─────────────────────────────────────────────────────
 export interface AuthenticatedRequest extends Request {
   merchantId?: string;
   apiKeyId?: string;
 }
 
-export async function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+// ─── Auth Middleware ───────────────────────────────────────────────────────────
+export async function authMiddleware(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   const authHeader = req.headers.authorization;
-
   if (!authHeader) {
     res.status(401).json({ error: 'Authentication required. Provide an API key in Authorization header.' });
     return;
@@ -107,46 +78,69 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
 
   const apiKey = authHeader.replace(/^Bearer\s+/i, '').trim();
 
+  // If it does NOT start with sk_, assume it's a JWT from the portal
   if (!apiKey.startsWith('sk_')) {
-    res.status(401).json({ error: 'Invalid API key format. API key must start with "sk_".' });
-    return;
+    return jwtMiddleware(req as any, res, next);
   }
 
+  const hashedKey = createHash('sha256').update(apiKey).digest('hex');
+  const cacheKey = `${APIKEY_CACHE_PREFIX}${hashedKey}`;
+
   try {
-    const cached = apiKeyCache.get(apiKey);
-    let merchantId = cached?.merchantId;
-    let apiKeyId = cached?.apiKeyId;
+    // ── 1. Redis cache fast-path ──────────────────────────────────────────────
+    let merchantId: string | undefined;
+    let apiKeyId: string | undefined;
 
-    if (!merchantId || !apiKeyId) {
-      const hashedKey = createHash('sha256').update(apiKey).digest('hex');
+    const cached = await redisService.get<{ merchantId: string; apiKeyId: string }>(cacheKey);
 
-      const apiKeyRecord = await prisma.apiKey.findUnique({
-        where: { hashedKey, deletedAt: null, isActive: true },
-        include: { merchant: true }
+    if (cached) {
+      merchantId = cached.merchantId;
+      apiKeyId = cached.apiKeyId;
+    } else {
+      // ── 2. DB lookup (cache miss) ─────────────────────────────────────────
+      const record = await prisma.apiKey.findFirst({
+        where: { hashedKey, isActive: true, deletedAt: null },
+        include: { merchant: { select: { id: true, status: true } } }
       });
 
-      if (!apiKeyRecord || apiKeyRecord.merchant.status !== 'ACTIVE') {
+      if (!record || !record.merchant || record.merchant.status !== 'ACTIVE') {
         res.status(401).json({ error: 'Invalid or revoked API key.' });
         return;
       }
 
-      if (apiKeyRecord.expiresAt && new Date() > apiKeyRecord.expiresAt) {
+      if (record.expiresAt && new Date() > record.expiresAt) {
         res.status(401).json({ error: 'API key has expired.' });
         return;
       }
 
-      merchantId = apiKeyRecord.merchantId;
-      apiKeyId = apiKeyRecord.id;
-      apiKeyCache.set(apiKey, { merchantId, apiKeyId });
+      merchantId = record.merchantId;
+      apiKeyId = record.id;
+
+      // Write to Redis cache (TTL 5 min)
+      await redisService.setex(cacheKey, APIKEY_CACHE_TTL, { merchantId, apiKeyId });
     }
 
+    // ── 3. Sliding-window rate limiting via Redis ─────────────────────────────
+    const now = new Date();
+    const windowKey = `${RATE_LIMIT_PREFIX}${apiKeyId}:${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}${String(now.getUTCDate()).padStart(2, '0')}${String(now.getUTCHours()).padStart(2, '0')}${String(now.getUTCMinutes()).padStart(2, '0')}`;
+
+    const requestCount = await redisService.incrWithExpire(windowKey, RATE_LIMIT_WINDOW);
+    if (requestCount > RATE_LIMIT_MAX) {
+      res.status(429).json({
+        error: 'Rate limit exceeded. Maximum 100 requests per minute per API key.',
+        retryAfter: RATE_LIMIT_WINDOW
+      });
+      return;
+    }
+
+    // ── 4. Attach context ─────────────────────────────────────────────────────
     req.merchantId = merchantId;
     req.apiKeyId = apiKeyId;
 
-    // Buffer usage log writing instead of fire-and-forget immediate database insert
+    // Async buffered usage log
     apiKeyUsageLogger.log({
       id: generateUuidV7(),
-      apiKeyId: apiKeyId,
+      apiKeyId: apiKeyId!,
       endpoint: req.originalUrl,
       ipAddress: (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1',
       status: 200
@@ -154,7 +148,9 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
 
     next();
   } catch (error: any) {
-    res.status(500).json({ error: 'Authentication internal subsystem error' });
+    logger.error({ err: error.message }, 'Auth middleware internal error');
+    res.status(500).json({ error: 'Authentication internal error' });
   }
 }
+
 export default authMiddleware;

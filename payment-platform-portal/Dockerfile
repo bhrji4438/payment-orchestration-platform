@@ -5,6 +5,7 @@ WORKDIR /app
 COPY payment-platform-portal/package*.json ./
 RUN npm ci
 COPY payment-platform-portal/ .
+RUN mkdir -p public
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
@@ -16,7 +17,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY payment-platform-portal/package*.json ./
 RUN npm ci --only=production
 COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public 2>/dev/null || true
+COPY --from=builder /app/public ./public
 COPY --from=builder /app/app ./app
 
 EXPOSE 3006

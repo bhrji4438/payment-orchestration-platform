@@ -11,5 +11,8 @@
     "dev:all": "concurrently \"cd payment-platform-core && npm run dev\" \"cd payment-platform-portal && npm run dev\"",
     "build:all": "cd payment-platform-core && npm run build && cd ../payment-platform-portal && npm run build && cd ../payment-platform-sdk && npm run build",
     "test:core": "cd payment-platform-core && npm test"
+  },
+  "dependencies": {
+    "concurrently": "^10.0.3"
   }
 }
