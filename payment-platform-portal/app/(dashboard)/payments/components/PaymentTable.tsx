@@ -3,6 +3,8 @@
 import React from 'react';
 import { DataTable, TableSchema } from '@components/datatable';
 
+import Link from 'next/link';
+
 const paymentTableSchema: TableSchema<any> = {
   columns: [
     {
@@ -12,9 +14,26 @@ const paymentTableSchema: TableSchema<any> = {
       format: (value) => <span className="font-mono text-xs text-zinc-400">{String(value)}</span>
     },
     {
+      key: 'customer',
+      label: 'Customer',
+      type: 'custom',
+      sortable: true,
+      format: (_, row) => {
+        if (!row.customer) return <span className="text-zinc-500">--</span>;
+        const name = `${row.customer.firstName || ''} ${row.customer.lastName || ''}`.trim();
+        const displayName = name || row.customer.email || 'Unknown';
+        return (
+          <Link href={`/customers/${row.customer.id}/edit`} className="text-indigo-400 hover:text-indigo-300 transition-colors hover:underline">
+            {displayName}
+          </Link>
+        );
+      }
+    },
+    {
       key: 'amount',
       label: 'Amount',
       type: 'currency',
+      sortable: true,
     },
     {
       key: 'status',
@@ -43,6 +62,7 @@ const paymentTableSchema: TableSchema<any> = {
       key: 'createdAt',
       label: 'Date',
       type: 'datetime',
+      sortable: true,
     }
   ],
   rowActions: ['view', 'refund', 'capture', 'void'],

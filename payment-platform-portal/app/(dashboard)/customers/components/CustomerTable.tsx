@@ -11,6 +11,7 @@ const customerTableSchema: TableSchema<any> = {
       key: 'customer',
       label: 'Customer',
       type: 'custom',
+      sortable: true,
       format: (_, row) => (
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-xs text-indigo-400">
@@ -40,11 +41,13 @@ const customerTableSchema: TableSchema<any> = {
       key: 'companyName',
       label: 'Company',
       type: 'text',
+      sortable: true,
     },
     {
       key: 'isActive',
       label: 'Status',
       type: 'custom',
+      sortable: true,
       format: (value) => (
         <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${
           value ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'

@@ -100,7 +100,7 @@ router.post(
 
 router.get('/payments', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { status, search, limit = 50, cursor } = req.query;
+    const { status, search, pageSize = 10, page = 1, sort, order } = req.query;
 
     const where: any = {
       merchantId: req.merchantId!,
@@ -119,28 +119,34 @@ router.get('/payments', async (req: AuthenticatedRequest, res: Response): Promis
       ];
     }
 
-    const take = Number(limit);
+    const take = Number(pageSize);
+    const skip = (Number(page) - 1) * take;
+    const sortOrder = order === 'asc' ? 'asc' : 'desc';
     
-    const payments = await prisma.payment.findMany({
-      where,
-      take: take + 1, // Fetch 1 extra to check if there is a next page
-      ...(cursor && {
-        skip: 1,
-        cursor: { id: cursor as string }
-      }),
-      orderBy: { createdAt: 'desc' },
-      include: {
-        gatewayConfig: {
-          include: { gatewayProvider: true }
-        }
-      }
-    });
-
-    let nextCursor: string | null = null;
-    if (payments.length > take) {
-      const nextItem = payments.pop();
-      nextCursor = nextItem!.id;
+    let orderBy: any = { createdAt: sortOrder };
+    if (sort === 'amount') {
+      orderBy = { amount: sortOrder };
+    } else if (sort === 'customer') {
+      orderBy = { customer: { firstName: sortOrder } };
+    } else if (sort === 'createdAt') {
+      orderBy = { createdAt: sortOrder };
     }
+    
+    const [total, payments] = await prisma.$transaction([
+      prisma.payment.count({ where }),
+      prisma.payment.findMany({
+        where,
+        take,
+        skip,
+        orderBy,
+        include: {
+          gatewayConfig: {
+            include: { gatewayProvider: true }
+          },
+          customer: true
+        }
+      })
+    ]);
 
     const formatted = payments.map((p) => ({
       id: p.id,
@@ -150,12 +156,23 @@ router.get('/payments', async (req: AuthenticatedRequest, res: Response): Promis
       cardBrand: p.cardBrand,
       cardLastFour: p.cardLastFour,
       gateway: p.gatewayConfig?.gatewayProvider.name || 'Direct',
-      createdAt: p.createdAt
+      createdAt: p.createdAt,
+      customer: p.customer ? {
+        id: p.customer.id,
+        firstName: p.customer.firstName,
+        lastName: p.customer.lastName,
+        email: p.customer.email
+      } : null
     }));
 
     res.json({
       data: formatted,
-      nextCursor
+      pagination: {
+        page: Number(page),
+        pageSize: take,
+        total,
+        totalPages: Math.ceil(total / take)
+      }
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

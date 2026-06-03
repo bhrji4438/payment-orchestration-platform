@@ -84,8 +84,8 @@ export class CustomerService {
     return updated;
   }
 
-  public async listCustomers(merchantId: string, params: { search?: string, limit?: number, cursor?: string }) {
-    const { search, limit = 50, cursor } = params;
+  public async listCustomers(merchantId: string, params: { search?: string, pageSize?: number, page?: number, sort?: string, order?: 'asc' | 'desc' }) {
+    const { search, pageSize = 10, page = 1, sort, order } = params;
     
     const where: any = {
       merchantId,
@@ -101,27 +101,39 @@ export class CustomerService {
       ];
     }
 
-    const take = Number(limit);
-
-    const customers = await prisma.customer.findMany({
-      where,
-      take: take + 1,
-      ...(cursor && {
-        skip: 1,
-        cursor: { id: cursor }
-      }),
-      orderBy: { createdAt: 'desc' }
-    });
-
-    let nextCursor: string | null = null;
-    if (customers.length > take) {
-      const nextItem = customers.pop();
-      nextCursor = nextItem!.id;
+    const take = Number(pageSize);
+    const skip = (Number(page) - 1) * take;
+    const sortOrder = order === 'asc' ? 'asc' : 'desc';
+    
+    let orderBy: any = { createdAt: sortOrder };
+    if (sort === 'customer') {
+      orderBy = { firstName: sortOrder };
+    } else if (sort === 'companyName') {
+      orderBy = { companyName: sortOrder };
+    } else if (sort === 'isActive') {
+      orderBy = { isActive: sortOrder };
+    } else if (sort === 'createdAt') {
+      orderBy = { createdAt: sortOrder };
     }
+
+    const [total, customers] = await prisma.$transaction([
+      prisma.customer.count({ where }),
+      prisma.customer.findMany({
+        where,
+        take,
+        skip,
+        orderBy
+      })
+    ]);
 
     return {
       data: customers,
-      nextCursor
+      pagination: {
+        page: Number(page),
+        pageSize: take,
+        total,
+        totalPages: Math.ceil(total / take)
+      }
     };
   }
 }
