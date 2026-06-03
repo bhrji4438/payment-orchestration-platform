@@ -161,6 +161,7 @@ For detailed guidelines and technical specifications, refer to the following doc
 - **[Shared Library Guide](./docs/shared_library.md)**: Usage guide for the single source of truth (`shared/`) modules, constants, validators, and error hierarchy.
 - **[Database Schema](./docs/database_schema.md)**: Schema topology, indexing strategy, and soft delete patterns using UUIDv7.
 - **[API Specification](./docs/api_specification.md)**: REST endpoints, authentication (Developer keys/JWTs), Zod request/response validation, and webhook HMAC signature verification.
+- **[DataTable Framework](./docs/frontend/datatable-framework.md)**: Unified UI components and schemas for rendering consistent data tables and actions across the portal.
 
 ### Development & Operations
 - **[Development & Coding Rules](./docs/development/development-rules.md)**: (NEW) Coding standards (ES6+/ES2023, strict TypeScript), project structure, testing requirements, security best practices, and code review Definition of Done.

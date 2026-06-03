@@ -6,6 +6,8 @@ export const metadata = {
   description: 'Enterprise Multi-Gateway Payment Orchestrator Developer and Merchant Hub',
 };
 
+import { Providers } from './providers';
+
 export default function RootLayout({
   children,
 }: {
@@ -19,7 +21,9 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
       </head>
       <body suppressHydrationWarning className="antialiased min-h-screen bg-zinc-950 text-zinc-50 selection:bg-indigo-500 selection:text-white">
-        {children}
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );

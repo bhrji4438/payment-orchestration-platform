@@ -40,6 +40,7 @@ payment-orchestration-platform/
 - **Pino Logger Factory**: Every logger instance must be created using `createLogger(name)` from `@shared/logger/create-logger`.
 - **UUIDv7 standard**: All entity IDs must be generated using `generateUuidV7()` from `@shared/ids/generate-uuid-v7`.
 - **Strict Code Sharing**: Shared utilities, constants, validators, errors, and DTOs must live only in `@shared/` and must be imported via paths mapped to `@shared/*`. No duplications are permitted.
+- **Frontend Presentation Layer**: The frontend must use the central `DataTable` framework (`@components/datatable`) and `ActionRegistry` (`@components/actions`) for all listings. Page-specific tables or actions are strictly prohibited.
 
 ---
 

@@ -12,3 +12,4 @@ globs: *
   - Rely on the shared library to avoid duplicating DTOs, utilities, or loggers.
   - Never use hardcoded or mock business data.
   - Ensure all new features are tested and documented.
+  - **Use Platform DataTable:** Always use `@components/datatable` and `@components/actions` for tables. Never build custom ones.

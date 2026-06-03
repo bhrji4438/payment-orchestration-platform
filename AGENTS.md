@@ -60,6 +60,16 @@ The frontend must remain a presentation layer.
 
 All business data must come from APIs. If an API does not exist, build the backend API (Service, Repository, DTO) and connect the frontend.
 
+### DataTable & Action Framework Rules
+
+* **Never** create page-specific tables.
+* **Always** use the platform `DataTable` framework (`@components/datatable`).
+* **Never** create duplicate table implementations or action buttons.
+* **Always** use `ActionRegistry` for defining actions.
+* **Always** use schema-driven tables.
+* **Always** use API-driven data.
+* **Never** hardcode table columns or dropdown actions.
+
 ## Backend Rules
 
 **Required Patterns:**
