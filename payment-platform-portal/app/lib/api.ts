@@ -44,9 +44,11 @@ api.interceptors.response.use(
 
       // Only retry if token is expired (not invalid/unauthorized)
       if (data?.code !== 'TOKEN_EXPIRED') {
-        useAuthStore.getState().logout();
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
+        if (!originalRequest.url?.includes('/v1/auth/login') && !originalRequest.url?.includes('/v1/auth/signup')) {
+          useAuthStore.getState().logout();
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login';
+          }
         }
         return Promise.reject(error);
       }

@@ -1,12 +1,10 @@
 import { Kafka } from 'kafkajs';
 import { PrismaClient } from '@prisma/client';
-import pino from 'pino';
+import { createLogger } from '@shared/logger/create-logger';
 import { processNotification } from '../services/notification.service';
 
 const prisma = new PrismaClient();
-const logger = pino({
-  transport: { target: 'pino-pretty' }
-});
+const logger = createLogger('notification-consumer');
 
 const brokers = process.env.KAFKA_BROKERS || 'localhost:9092';
 const kafkaEnabled = process.env.KAFKA_ENABLED !== 'false';

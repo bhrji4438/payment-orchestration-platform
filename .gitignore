@@ -16,6 +16,7 @@ dist/
 build/
 *.tsbuildinfo
 *.js.map
+shared/**/*.js
 
 # ── Environment & Secrets ─────────────────────────────────────────────────────
 .env

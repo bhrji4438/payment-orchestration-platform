@@ -1,5 +1,6 @@
 # Stage 1: Build
 FROM node:22-alpine AS builder
+RUN apk add --no-cache openssl
 WORKDIR /app
 # Copy shared library
 COPY shared/ ./shared/
@@ -13,6 +14,7 @@ RUN npm run build
 
 # Stage 2: Runtime
 FROM node:22-alpine AS runner
+RUN apk add --no-cache openssl
 WORKDIR /app
 ENV NODE_ENV=production
 # Copy shared library to /app/shared/

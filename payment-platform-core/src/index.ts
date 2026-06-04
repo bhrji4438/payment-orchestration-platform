@@ -2,7 +2,7 @@ import './pre-start';
 import express, { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
-import pino from 'pino';
+import { createLogger } from '@shared/logger/create-logger';
 import paymentRoutes from './modules/payments/payment.routes';
 import webhookRoutes from './modules/webhooks/webhook.routes';
 import authRoutes from './modules/auth/auth.routes';
@@ -13,9 +13,7 @@ import { outboxPublisher } from './infrastructure/outbox/outbox-publisher';
 import { kafkaService } from './infrastructure/kafka/kafka.service';
 import { redisService } from './infrastructure/redis/redis.service';
 
-const logger = pino({
-  transport: { target: 'pino-pretty' }
-});
+const logger = createLogger('payment-platform-core');
 
 const app = express();
 const port = process.env.PORT || 3000;

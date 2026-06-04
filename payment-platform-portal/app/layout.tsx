@@ -1,9 +1,10 @@
 import './globals.css';
 import React from 'react';
+import { BRAND } from '@shared/constants/brand.constants';
 
 export const metadata = {
-  title: 'Payment Orchestration Portal',
-  description: 'Enterprise Multi-Gateway Payment Orchestrator Developer and Merchant Hub',
+  title: BRAND.NAME,
+  description: BRAND.PORTAL_DESCRIPTION,
 };
 
 import { Providers } from './providers';

@@ -6,6 +6,7 @@ import { Eye, EyeOff, Cpu, Loader2, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
+import { BRAND } from '@shared/constants/brand.constants';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -68,8 +69,8 @@ export default function SignupPage() {
               <Cpu className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h1 className="font-bold text-zinc-50 text-lg leading-none">Antigravity</h1>
-              <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-semibold">Payment Core</span>
+              <h1 className="font-bold text-zinc-50 text-lg leading-none">{BRAND.NAME}</h1>
+              <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-semibold">{BRAND.CORE_SUBTITLE}</span>
             </div>
           </div>
 
@@ -134,8 +135,8 @@ export default function SignupPage() {
             <Cpu className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="font-bold text-zinc-50 text-lg leading-none">Antigravity</h1>
-            <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-semibold">Payment Core</span>
+            <h1 className="font-bold text-zinc-50 text-lg leading-none">{BRAND.NAME}</h1>
+            <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-semibold">{BRAND.CORE_SUBTITLE}</span>
           </div>
         </div>
 

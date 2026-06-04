@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { authApi } from '@/lib/api';
+import { BRAND } from '@shared/constants/brand.constants';
 
 const SIDEBAR_ITEMS = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -75,8 +76,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Cpu className="h-4 w-4 text-white" />
             </div>
             <div>
-              <h1 className="font-bold text-zinc-50 text-sm leading-none">Antigravity</h1>
-              <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-semibold">Platform Core</span>
+              <h1 className="font-bold text-zinc-50 text-sm leading-none">{BRAND.NAME}</h1>
+              <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-semibold">{BRAND.PORTAL_SUBTITLE}</span>
             </div>
           </div>
         </div>

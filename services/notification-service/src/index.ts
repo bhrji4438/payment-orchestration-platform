@@ -14,11 +14,9 @@ validateEnv([
 ], 'notification-service');
 
 import { startNotificationConsumer } from './consumers/notification.consumer';
-import pino from 'pino';
+import { createLogger } from '@shared/logger/create-logger';
 
-const logger = pino({
-  transport: { target: 'pino-pretty' }
-});
+const logger = createLogger('notification-service');
 
 const port = process.env.PORT || 3002;
 

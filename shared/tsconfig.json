@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "outDir": "dist",
+    "paths": {
+      "pino": ["../payment-platform-core/node_modules/pino"],
+      "zod": ["../payment-platform-core/node_modules/zod"]
+    }
+  },
+  "include": ["**/*"],
+  "exclude": ["dist"]
+}
