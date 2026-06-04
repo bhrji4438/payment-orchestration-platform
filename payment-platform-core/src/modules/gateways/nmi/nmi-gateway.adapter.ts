@@ -39,6 +39,11 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
     return !securityKey && !username;
   }
 
+  private parseXmlTag(xml: string, tag: string): string | null {
+    const match = new RegExp(`<${tag}>(.*?)</${tag}>`, 's').exec(xml);
+    return match ? match[1].trim() : null;
+  }
+
   public async creditCardSale(request: CreditCardSaleRequestDto): Promise<PaymentResponseDto> {
     this.validateRequest(request);
     this.auditGatewayRequest('creditCardSale', request);
@@ -67,17 +72,32 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
     params.append('ccexp', `${request.card.expiryMonth}${request.card.expiryYear.slice(-2)}`);
     params.append('cvv', request.card.cvv);
 
+    const nameParts = (request.card.holderName || '').trim().split(/\s+/);
+    const firstname = nameParts[0] || '';
+    const lastname = nameParts.slice(1).join(' ') || '';
+    if (firstname) params.append('firstname', firstname);
+    if (lastname) params.append('lastname', lastname);
+
+    if (request.card.billingAddress) {
+      const { addressLine1, city, state, postalCode, country } = request.card.billingAddress;
+      if (addressLine1) params.append('address1', addressLine1);
+      if (city) params.append('city', city);
+      if (state) params.append('state', state);
+      if (postalCode) params.append('zip', postalCode);
+      if (country) params.append('country', country);
+    }
+
     try {
       const res = await axios.post(this.getEndpoint(), params.toString(), {
         headers: this.buildHeaders({ 'Content-Type': 'application/x-www-form-urlencoded' })
       });
       const data = new URLSearchParams(res.data);
-      const success = data.get('response') === '1';
+      const success = data.get('response') === '1' || data.get('response_code') === '100';
 
       const response = {
         success,
         transactionReference: data.get('transactionid') || undefined,
-        responseCode: data.get('response') || undefined,
+        responseCode: data.get('response_code') || data.get('response') || undefined,
         responseMessage: data.get('responsetext') || 'Processed',
         cardBrand: 'Visa',
         cardLastFour: request.card.pan.slice(-4),
@@ -118,17 +138,32 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
     params.append('ccexp', `${request.card.expiryMonth}${request.card.expiryYear.slice(-2)}`);
     params.append('cvv', request.card.cvv);
 
+    const nameParts = (request.card.holderName || '').trim().split(/\s+/);
+    const firstname = nameParts[0] || '';
+    const lastname = nameParts.slice(1).join(' ') || '';
+    if (firstname) params.append('firstname', firstname);
+    if (lastname) params.append('lastname', lastname);
+
+    if (request.card.billingAddress) {
+      const { addressLine1, city, state, postalCode, country } = request.card.billingAddress;
+      if (addressLine1) params.append('address1', addressLine1);
+      if (city) params.append('city', city);
+      if (state) params.append('state', state);
+      if (postalCode) params.append('zip', postalCode);
+      if (country) params.append('country', country);
+    }
+
     try {
       const res = await axios.post(this.getEndpoint(), params.toString(), {
         headers: this.buildHeaders({ 'Content-Type': 'application/x-www-form-urlencoded' })
       });
       const data = new URLSearchParams(res.data);
-      const success = data.get('response') === '1';
+      const success = data.get('response') === '1' || data.get('response_code') === '100';
 
       const response = {
         success,
         transactionReference: data.get('transactionid') || undefined,
-        responseCode: data.get('response') || undefined,
+        responseCode: data.get('response_code') || data.get('response') || undefined,
         responseMessage: data.get('responsetext') || 'Processed',
         cardBrand: 'Visa',
         cardLastFour: request.card.pan.slice(-4),
@@ -168,10 +203,12 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
         headers: this.buildHeaders({ 'Content-Type': 'application/x-www-form-urlencoded' })
       });
       const data = new URLSearchParams(res.data);
+      const success = data.get('response') === '1' || data.get('response_code') === '100';
+
       const response = {
-        success: data.get('response') === '1',
+        success,
         transactionReference: data.get('transactionid') || undefined,
-        responseCode: data.get('response') || undefined,
+        responseCode: data.get('response_code') || data.get('response') || undefined,
         responseMessage: data.get('responsetext') || 'Captured',
         rawResponse: res.data
       };
@@ -210,10 +247,12 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
         headers: this.buildHeaders({ 'Content-Type': 'application/x-www-form-urlencoded' })
       });
       const data = new URLSearchParams(res.data);
+      const success = data.get('response') === '1' || data.get('response_code') === '100';
+
       const response = {
-        success: data.get('response') === '1',
+        success,
         transactionReference: data.get('transactionid') || undefined,
-        responseCode: data.get('response') || undefined,
+        responseCode: data.get('response_code') || data.get('response') || undefined,
         responseMessage: data.get('responsetext') || 'Refunded',
         rawResponse: res.data
       };
@@ -250,10 +289,12 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
         headers: this.buildHeaders({ 'Content-Type': 'application/x-www-form-urlencoded' })
       });
       const data = new URLSearchParams(res.data);
+      const success = data.get('response') === '1' || data.get('response_code') === '100';
+
       const response = {
-        success: data.get('response') === '1',
+        success,
         transactionReference: data.get('transactionid') || undefined,
-        responseCode: data.get('response') || undefined,
+        responseCode: data.get('response_code') || data.get('response') || undefined,
         responseMessage: data.get('responsetext') || 'Voided',
         rawResponse: res.data
       };
@@ -267,39 +308,153 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
   public async echeckSale(request: EcheckSaleRequestDto): Promise<PaymentResponseDto> {
     this.validateRequest(request);
     this.auditGatewayRequest('echeckSale', request);
-    const mockRefId = 'nmi_ach_' + Math.floor(Math.random() * 1000000);
-    return {
-      success: true,
-      transactionReference: mockRefId,
-      responseCode: '100',
-      responseMessage: 'Approved (Mock)',
-      rawResponse: 'response=1&responsetext=SUCCESS&transactionid=' + mockRefId
-    };
+
+    if (this.isMockMode()) {
+      const mockRefId = 'nmi_ach_' + Math.floor(Math.random() * 1000000);
+      const response = {
+        success: true,
+        transactionReference: mockRefId,
+        responseCode: '100',
+        responseMessage: 'Approved (Mock)',
+        rawResponse: 'response=1&responsetext=SUCCESS&transactionid=' + mockRefId
+      };
+      this.auditGatewayResponse('echeckSale', response);
+      return response;
+    }
+
+    const params = new URLSearchParams();
+    this.buildAuthParams(params);
+    params.append('type', 'sale');
+    params.append('payment', 'check');
+    params.append('amount', request.amount.toFixed(2));
+    params.append('currency', request.currency);
+    params.append('checkname', request.echeck.accountName);
+    params.append('checkaccount', request.echeck.accountNumber);
+    params.append('checkaba', request.echeck.routingNumber);
+    params.append('account_type', request.echeck.accountType);
+    params.append('account_holder_type', 'personal');
+    params.append('sec_code', 'WEB');
+
+    const nameParts = (request.echeck.accountName || '').trim().split(/\s+/);
+    const firstname = nameParts[0] || '';
+    const lastname = nameParts.slice(1).join(' ') || '';
+    if (firstname) params.append('firstname', firstname);
+    if (lastname) params.append('lastname', lastname);
+
+    if (request.echeck.billingAddress) {
+      const { addressLine1, city, state, postalCode, country } = request.echeck.billingAddress;
+      if (addressLine1) params.append('address1', addressLine1);
+      if (city) params.append('city', city);
+      if (state) params.append('state', state);
+      if (postalCode) params.append('zip', postalCode);
+      if (country) params.append('country', country);
+    }
+
+    try {
+      const res = await axios.post(this.getEndpoint(), params.toString(), {
+        headers: this.buildHeaders({ 'Content-Type': 'application/x-www-form-urlencoded' })
+      });
+      const data = new URLSearchParams(res.data);
+      const success = data.get('response') === '1' || data.get('response_code') === '100';
+
+      const response = {
+        success,
+        transactionReference: data.get('transactionid') || undefined,
+        responseCode: data.get('response_code') || data.get('response') || undefined,
+        responseMessage: data.get('responsetext') || 'Processed',
+        rawResponse: res.data
+      };
+      this.auditGatewayResponse('echeckSale', response);
+      return response;
+    } catch (error: any) {
+      throw this.mapGatewayError('echeckSale', error);
+    }
   }
 
   public async echeckRefund(request: EcheckRefundRequestDto): Promise<PaymentResponseDto> {
     this.validateRequest(request);
     this.auditGatewayRequest('echeckRefund', request);
-    const mockRefId = 'nmi_ach_ref_' + Math.floor(Math.random() * 1000000);
-    return {
-      success: true,
-      transactionReference: mockRefId,
-      responseCode: '100',
-      responseMessage: 'Refunded (Mock)',
-      rawResponse: 'response=1&responsetext=SUCCESS'
-    };
+
+    if (this.isMockMode()) {
+      const mockRefId = 'nmi_ach_ref_' + Math.floor(Math.random() * 1000000);
+      const response = {
+        success: true,
+        transactionReference: mockRefId,
+        responseCode: '100',
+        responseMessage: 'Refunded (Mock)',
+        rawResponse: 'response=1&responsetext=SUCCESS'
+      };
+      this.auditGatewayResponse('echeckRefund', response);
+      return response;
+    }
+
+    const params = new URLSearchParams();
+    this.buildAuthParams(params);
+    params.append('type', 'refund');
+    params.append('transactionid', request.transactionReference);
+    params.append('amount', request.amount.toFixed(2));
+
+    try {
+      const res = await axios.post(this.getEndpoint(), params.toString(), {
+        headers: this.buildHeaders({ 'Content-Type': 'application/x-www-form-urlencoded' })
+      });
+      const data = new URLSearchParams(res.data);
+      const success = data.get('response') === '1' || data.get('response_code') === '100';
+
+      const response = {
+        success,
+        transactionReference: data.get('transactionid') || undefined,
+        responseCode: data.get('response_code') || data.get('response') || undefined,
+        responseMessage: data.get('responsetext') || 'Refunded',
+        rawResponse: res.data
+      };
+      this.auditGatewayResponse('echeckRefund', response);
+      return response;
+    } catch (error: any) {
+      throw this.mapGatewayError('echeckRefund', error);
+    }
   }
 
   public async echeckVoid(request: EcheckVoidRequestDto): Promise<PaymentResponseDto> {
     this.validateRequest(request);
     this.auditGatewayRequest('echeckVoid', request);
-    return {
-      success: true,
-      transactionReference: request.transactionReference,
-      responseCode: '100',
-      responseMessage: 'Voided (Mock)',
-      rawResponse: 'response=1&responsetext=SUCCESS'
-    };
+
+    if (this.isMockMode()) {
+      const response = {
+        success: true,
+        transactionReference: request.transactionReference,
+        responseCode: '100',
+        responseMessage: 'Voided (Mock)',
+        rawResponse: 'response=1&responsetext=SUCCESS'
+      };
+      this.auditGatewayResponse('echeckVoid', response);
+      return response;
+    }
+
+    const params = new URLSearchParams();
+    this.buildAuthParams(params);
+    params.append('type', 'void');
+    params.append('transactionid', request.transactionReference);
+
+    try {
+      const res = await axios.post(this.getEndpoint(), params.toString(), {
+        headers: this.buildHeaders({ 'Content-Type': 'application/x-www-form-urlencoded' })
+      });
+      const data = new URLSearchParams(res.data);
+      const success = data.get('response') === '1' || data.get('response_code') === '100';
+
+      const response = {
+        success,
+        transactionReference: data.get('transactionid') || undefined,
+        responseCode: data.get('response_code') || data.get('response') || undefined,
+        responseMessage: data.get('responsetext') || 'Voided',
+        rawResponse: res.data
+      };
+      this.auditGatewayResponse('echeckVoid', response);
+      return response;
+    } catch (error: any) {
+      throw this.mapGatewayError('echeckVoid', error);
+    }
   }
 
   public async getTransaction(transactionReference: string): Promise<PaymentResponseDto> {
@@ -322,15 +477,18 @@ export class NmiGatewayAdapter extends AbstractPaymentGateway {
       const res = await axios.post('https://secure.networkmerchants.com/api/query.php', params.toString(), {
         headers: this.buildHeaders({ 'Content-Type': 'application/x-www-form-urlencoded' })
       });
-      const data = new URLSearchParams(res.data);
-      const success = data.get('response') === '1' || data.get('status') === 'success';
+      const xml = res.data;
+      const responseCode = this.parseXmlTag(xml, 'response_code') || undefined;
+      const success = responseCode === '100' || this.parseXmlTag(xml, 'result') === 'update_success';
+      const transactionId = this.parseXmlTag(xml, 'transaction_id') || transactionReference;
+      const responseText = this.parseXmlTag(xml, 'responsetext') || 'Query Complete';
 
       return {
         success,
-        transactionReference: data.get('transactionid') || transactionReference,
-        responseCode: data.get('response') || undefined,
-        responseMessage: data.get('responsetext') || 'Query Complete',
-        rawResponse: res.data
+        transactionReference: transactionId,
+        responseCode,
+        responseMessage: responseText,
+        rawResponse: xml
       };
     } catch (error: any) {
       throw this.mapGatewayError('getTransaction', error);

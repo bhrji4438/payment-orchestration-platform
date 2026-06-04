@@ -13,6 +13,150 @@ import {
 } from 'lucide-react';
 import { gatewaysApi } from '@/lib/api';
 
+const renderCredentialFields = (
+  providerCode: string,
+  values: Record<string, string>,
+  onChange: (key: string, value: string) => void,
+  isEdit: boolean = false
+) => {
+  const inputClass = "w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500 transition-colors";
+  const labelClass = "block text-xs font-medium text-zinc-400 mb-1.5";
+
+  switch (providerCode) {
+    case 'STRIPE':
+      return (
+        <div>
+          <label className={labelClass}>API Key {!isEdit && <span className="text-red-500">*</span>}</label>
+          <input
+            required={!isEdit}
+            type="password"
+            placeholder={isEdit ? "Enter new API key to update..." : "sk_test_..."}
+            value={values.apiKey || ''}
+            onChange={e => onChange('apiKey', e.target.value)}
+            className={inputClass}
+          />
+        </div>
+      );
+    case 'NMI':
+      return (
+        <div className="space-y-4">
+          <div>
+            <label className={labelClass}>Username {!isEdit && <span className="text-red-500">*</span>}</label>
+            <input
+              required={!isEdit}
+              type="text"
+              placeholder={isEdit ? "Enter new username to update..." : "Username.."}
+              value={values.username || ''}
+              onChange={e => onChange('username', e.target.value)}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Password {!isEdit && <span className="text-red-500">*</span>}</label>
+            <input
+              required={!isEdit}
+              type="password"
+              placeholder={isEdit ? "Enter new password to update..." : "password.."}
+              value={values.password || ''}
+              onChange={e => onChange('password', e.target.value)}
+              className={inputClass}
+            />
+          </div>
+        </div>
+      );
+    case 'AUTHORIZE_NET':
+      return (
+        <div className="space-y-4">
+          <div>
+            <label className={labelClass}>Login ID {!isEdit && <span className="text-red-500">*</span>}</label>
+            <input
+              required={!isEdit}
+              type="text"
+              placeholder={isEdit ? "Enter new Login ID to update..." : "Login ID"}
+              value={values.loginId || ''}
+              onChange={e => onChange('loginId', e.target.value)}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Transaction Key {!isEdit && <span className="text-red-500">*</span>}</label>
+            <input
+              required={!isEdit}
+              type="password"
+              placeholder={isEdit ? "Enter new Transaction Key to update..." : "Transaction Key"}
+              value={values.transactionKey || ''}
+              onChange={e => onChange('transactionKey', e.target.value)}
+              className={inputClass}
+            />
+          </div>
+        </div>
+      );
+    case 'CARDPOINTE':
+    case 'CUSTOM':
+      return (
+        <div className="space-y-4">
+          <div>
+            <label className={labelClass}>Merchant ID {!isEdit && <span className="text-red-500">*</span>}</label>
+            <input
+              required={!isEdit}
+              type="text"
+              placeholder={isEdit ? "Enter new Merchant ID to update..." : "Merchant ID"}
+              value={values.merchantid || ''}
+              onChange={e => onChange('merchantid', e.target.value)}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Username {!isEdit && <span className="text-red-500">*</span>}</label>
+            <input
+              required={!isEdit}
+              type="text"
+              placeholder={isEdit ? "Enter new username to update..." : "Username"}
+              value={values.cardpointeuser || ''}
+              onChange={e => onChange('cardpointeuser', e.target.value)}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Password {!isEdit && <span className="text-red-500">*</span>}</label>
+            <input
+              required={!isEdit}
+              type="password"
+              placeholder={isEdit ? "Enter new password to update..." : "Password"}
+              value={values.cardpointepass || ''}
+              onChange={e => onChange('cardpointepass', e.target.value)}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Site Name (Optional)</label>
+            <input
+              type="text"
+              placeholder="fts"
+              value={values.siteName || ''}
+              onChange={e => onChange('siteName', e.target.value)}
+              className={inputClass}
+            />
+          </div>
+        </div>
+      );
+    default:
+      return (
+        <div>
+          <label className={labelClass}>API Secret Key {!isEdit && <span className="text-red-500">*</span>}</label>
+          <input
+            required={!isEdit}
+            type="password"
+            placeholder={isEdit ? "Enter new key to update..." : "sk_test_..."}
+            value={values.secretKey || ''}
+            onChange={e => onChange('secretKey', e.target.value)}
+            className={inputClass}
+          />
+        </div>
+      );
+  }
+};
+
 export default function GatewaysPage() {
   const [configs, setConfigs] = useState<any[]>([]);
   const [providers, setProviders] = useState<any[]>([]);
@@ -21,6 +165,7 @@ export default function GatewaysPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingConfig, setEditingConfig] = useState<any>(null);
   const [newConfig, setNewConfig] = useState({ providerId: '', displayName: '', priority: 1, secretKey: '' });
+  const [credentialsInput, setCredentialsInput] = useState<Record<string, string>>({});
 
   const fetchData = async () => {
     setLoading(true);
@@ -45,14 +190,22 @@ export default function GatewaysPage() {
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const credentials: Record<string, string> = {};
+      Object.entries(credentialsInput).forEach(([k, v]) => {
+        if (v.trim() !== '') {
+          credentials[k] = v.trim();
+        }
+      });
+
       await gatewaysApi.createConfiguration({
         gatewayProviderId: newConfig.providerId,
         displayName: newConfig.displayName,
         priority: newConfig.priority,
-        credentials: { secretKey: newConfig.secretKey }
+        credentials
       });
       setShowAddModal(false);
       setNewConfig({ providerId: '', displayName: '', priority: 1, secretKey: '' });
+      setCredentialsInput({});
       fetchData();
     } catch (err) {
       alert('Failed to add gateway');
@@ -76,12 +229,19 @@ export default function GatewaysPage() {
         priority: editingConfig.priority,
         isActive: editingConfig.isActive
       };
-      if (editingConfig.secretKey) {
-        payload.credentials = { secretKey: editingConfig.secretKey };
+      const credentials: Record<string, string> = {};
+      Object.entries(credentialsInput).forEach(([k, v]) => {
+        if (v.trim() !== '') {
+          credentials[k] = v.trim();
+        }
+      });
+      if (Object.keys(credentials).length > 0) {
+        payload.credentials = credentials;
       }
       await gatewaysApi.updateConfiguration(editingConfig.id, payload);
       setShowEditModal(false);
       setEditingConfig(null);
+      setCredentialsInput({});
       fetchData();
     } catch (err) {
       alert('Failed to update gateway');
@@ -115,7 +275,11 @@ export default function GatewaysPage() {
           <p className="text-zinc-400 mt-1">Configure your payment waterfall and circuit breakers.</p>
         </div>
         <button 
-          onClick={() => setShowAddModal(true)}
+          onClick={() => {
+            setNewConfig({ providerId: '', displayName: '', priority: 1, secretKey: '' });
+            setCredentialsInput({});
+            setShowAddModal(true);
+          }}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm text-white font-medium transition-all shadow-[0_0_15px_rgba(79,70,229,0.3)]"
         >
           <Plus className="h-4 w-4" />
@@ -200,7 +364,8 @@ export default function GatewaysPage() {
                 )}
                 <button 
                   onClick={() => {
-                    setEditingConfig({ ...g, secretKey: '' });
+                    setEditingConfig({ ...g });
+                    setCredentialsInput({});
                     setShowEditModal(true);
                   }}
                   className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-md transition-colors flex items-center gap-1"
@@ -229,7 +394,10 @@ export default function GatewaysPage() {
                 <select
                   required
                   value={newConfig.providerId}
-                  onChange={e => setNewConfig({...newConfig, providerId: e.target.value})}
+                  onChange={e => {
+                    setNewConfig({...newConfig, providerId: e.target.value});
+                    setCredentialsInput({});
+                  }}
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-300"
                 >
                   <option value="">Select a provider...</option>
@@ -260,17 +428,16 @@ export default function GatewaysPage() {
                   className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-300"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">API Secret Key</label>
-                <input
-                  required
-                  type="password"
-                  placeholder="sk_test_..."
-                  value={newConfig.secretKey}
-                  onChange={e => setNewConfig({...newConfig, secretKey: e.target.value})}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-300"
-                />
-              </div>
+              {(() => {
+                const selectedProvider = providers.find(p => p.id === newConfig.providerId);
+                const providerCode = selectedProvider?.code?.toUpperCase() || '';
+                return renderCredentialFields(
+                  providerCode,
+                  credentialsInput,
+                  (key, val) => setCredentialsInput(prev => ({ ...prev, [key]: val })),
+                  false
+                );
+              })()}
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-2 rounded-lg bg-zinc-800 text-sm font-medium text-zinc-300">
                   Cancel
@@ -331,16 +498,12 @@ export default function GatewaysPage() {
                   </select>
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">API Secret Key (Optional - Leave blank to keep current)</label>
-                <input
-                  type="password"
-                  placeholder="Enter new key to update..."
-                  value={editingConfig.secretKey}
-                  onChange={e => setEditingConfig({...editingConfig, secretKey: e.target.value})}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-300"
-                />
-              </div>
+              {renderCredentialFields(
+                editingConfig.provider.code.toUpperCase(),
+                credentialsInput,
+                (key, val) => setCredentialsInput(prev => ({ ...prev, [key]: val })),
+                true
+              )}
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowEditModal(false)} className="flex-1 py-2 rounded-lg bg-zinc-800 text-sm font-medium text-zinc-300">
                   Cancel
