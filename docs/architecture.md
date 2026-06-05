@@ -32,6 +32,13 @@ payment-orchestration-platform/
 │   └── settlement-service/    ← Bank payout reconciliation engine
 │
 ├── payment-platform-portal/   ← Next.js 15 Merchant & Developer Web Dashboard
+│   ├── app/lib/
+│   │   ├── api.ts             ← Axios client + handleApiError() central error router
+│   │   └── messages.ts        ← Centralized message registry (single source of truth for UI strings)
+│   └── components/
+│       ├── notification/      ← Singleton NotificationService + React NotificationProvider + Toast UI
+│       └── validation/        ← useFormValidation + ValidationField + InputErrorState (inline only)
+│
 └── payment-platform-sdk/      ← Node.js Client SDK (standalone integration library)
 ```
 
@@ -41,6 +48,9 @@ payment-orchestration-platform/
 - **UUIDv7 standard**: All entity IDs must be generated using `generateUuidV7()` from `@shared/ids/generate-uuid-v7`.
 - **Strict Code Sharing**: Shared utilities, constants, validators, errors, and DTOs must live only in `@shared/` and must be imported via paths mapped to `@shared/*`. No duplications are permitted.
 - **Frontend Presentation Layer**: The frontend must use the central `DataTable` framework (`@components/datatable`) and `ActionRegistry` (`@components/actions`) for all listings. Page-specific tables or actions are strictly prohibited.
+- **Frontend Message Registry**: All user-facing strings (validation messages, success/error copy, toast messages) must be sourced from `app/lib/messages.ts`. Hardcoded strings in components or Zod schemas are prohibited.
+- **Frontend Notification System**: All user-facing success, error, warning, and info feedback must go through `@components/notification`. Direct `alert()`, `console.error()`, or custom toast implementations are prohibited.
+- **Frontend Error Routing**: All API `catch` blocks must delegate to `handleApiError()` from `@/lib/api`. Field-specific server errors are mapped inline; system errors are shown as toasts. Custom per-page error routing logic is prohibited.
 
 ---
 

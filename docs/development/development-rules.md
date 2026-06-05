@@ -200,3 +200,104 @@ When using AI agents or LLMs to refactor or extend the codebase, follow these ru
 - **Docstring Preservation**: Do not remove existing comments, documentation blocks, or symbol links.
 - **Shared First**: Always search the `@shared/` directory for existing helper utilities, errors, or enums before generating a new one.
 - **No Direct SDK Imports**: Never import external gateway SDKs inside core services. Create adapters mapping to `AbstractPaymentGateway` instead.
+
+---
+
+## 12. Frontend Coding Standards (Portal)
+
+These rules apply specifically to `payment-platform-portal`. They enforce a consistent, auditable, and i18n-ready frontend.
+
+### 12.1 Message Registry (Single Source of Truth)
+
+All user-facing strings must be imported from `app/lib/messages.ts`. This includes:
+- Zod schema validation messages
+- Toast notification messages (success, error, warning, info)
+- Fallback messages passed to `handleApiError()`
+
+**Forbidden:**
+```typescript
+// Hardcoded strings in Zod schemas
+z.string().min(1, 'Email address is required')
+
+// Hardcoded strings in catch blocks
+notification.error('Failed to save gateway')
+```
+
+**Required:**
+```typescript
+import { Messages } from '@/lib/messages';
+
+// Zod schemas
+z.string().min(1, Messages.VALIDATION.EMAIL_REQUIRED).email(Messages.VALIDATION.EMAIL_INVALID)
+
+// Catch blocks
+notification.error(Messages.GATEWAY.CREATE_FAILED)
+```
+
+To add new messages, append a domain block to `messages.ts` following the established namespace pattern. Never add strings inline.
+
+---
+
+### 12.2 Notification System
+
+All user-facing feedback (success, error, warning, info) must use the centralized notification system.
+
+**Forbidden:**
+```typescript
+alert('Key copied to clipboard');
+alert('Failed to rotate key');
+// Custom toast implementations
+// inline <div> banners for success/error
+```
+
+**Required:**
+```typescript
+// Inside React components
+import { useNotification } from '@components/notification';
+const notification = useNotification();
+notification.success(Messages.DEVELOPER.KEY_COPIED_SUCCESS);
+notification.error(Messages.DEVELOPER.KEY_ROTATE_FAILED);
+
+// Outside React (interceptors, utilities)
+import { NotificationService } from '@components/notification';
+NotificationService.error(Messages.SYSTEM.NETWORK_ERROR);
+```
+
+**Validation errors are never toasts.** Field-level errors are always shown inline below the field via `@components/validation`.
+
+---
+
+### 12.3 API Error Routing
+
+All API `catch` blocks must delegate to `handleApiError()`. No custom error routing.
+
+**Forbidden:**
+```typescript
+} catch (err: any) {
+  setFieldError('submit', err.response?.data?.error || 'Failed to save');
+}
+```
+
+**Required:**
+```typescript
+import { handleApiError } from '@/lib/api';
+import { Messages } from '@/lib/messages';
+
+} catch (err) {
+  handleApiError(err, setFieldError, Messages.CUSTOMER.UPDATE_FAILED);
+}
+```
+
+**Exception**: Auth forms (`login`, `signup`) may use `setFieldError('submit', msg)` for credential errors that are directly actionable on the same form.
+
+---
+
+### 12.4 Inline Validation Standard
+
+Validation errors must never be displayed as global banners, top alerts, or toasts. They must appear inline, directly below the offending field.
+
+- Use `ValidationField` + `InputErrorState` / `SelectErrorState` from `@components/validation` for every form field.
+- Use `useFormValidation` hook for all form state (values, errors, touched, blur, submit).
+- Validation fires: on blur, on change (if field already has an error), and on submit (all fields + focus-first-error).
+- `ValidationMessage` is only permitted for auth `submit` errors (login/signup credential failures).
+

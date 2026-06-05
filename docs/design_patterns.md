@@ -183,3 +183,97 @@ This document catalogs and explains the design patterns implemented in the Payme
   }
   ```
 - **Benefits**: Guarantees all adapters are interchangeable through the factory.
+
+---
+
+## 14. Singleton Notification Service Pattern (Frontend)
+
+- **Why Used**: Toast notifications must be triggerable from both React components and non-React contexts (Axios interceptors, Zustand actions, utility functions). A React-only context hook cannot satisfy this requirement.
+- **Justification**: The `NotificationService` singleton is a plain TypeScript class with no React dependency. The React `NotificationProvider` subscribes to it via a listener. Any code in the application can call `NotificationService.error()` and the UI will respond.
+- **File Location**: [`components/notification/notification.service.ts`](../payment-platform-portal/components/notification/notification.service.ts)
+- **Production Code Example**:
+  ```typescript
+  // Inside a React component — use the hook
+  import { useNotification } from '@components/notification';
+  const notification = useNotification();
+  notification.success(Messages.GATEWAY.CREATE_SUCCESS);
+
+  // Outside React (e.g. Axios interceptor, api.ts) — use the singleton directly
+  import { NotificationService } from '@components/notification';
+  NotificationService.error(Messages.SYSTEM.NETWORK_ERROR);
+  ```
+- **Benefits**: Decouples notification emission from the React component tree. Follows the same pattern used by Sentry SDK, Datadog RUM, and Apollo Client error links.
+- **Rules**:
+  - Never call `alert()` or create custom toast implementations. Always use `NotificationService` or `useNotification()`.
+  - Max 3 toasts visible simultaneously. Deduplication by message + variant is automatic.
+  - Auto-dismiss durations: `success` 4s, `info` 5s, `warning` 6s, `error` 8s.
+
+---
+
+## 15. Message Registry Pattern (Frontend)
+
+- **Why Used**: Hardcoded user-facing strings scattered across components, Zod schemas, and catch blocks make copy changes risky and i18n impossible without a full codebase grep.
+- **Justification**: `app/lib/messages.ts` is the single source of truth for every user-facing string. It uses tag-based generic factories for parameterized messages and domain-namespaced constants for direct references.
+- **File Location**: [`app/lib/messages.ts`](../payment-platform-portal/app/lib/messages.ts)
+- **Production Code Example**:
+  ```typescript
+  import { Messages } from '@/lib/messages';
+
+  // Tag-based factory — one template, zero duplication
+  Messages.GENERIC.REQUIRED('Email address')  // → "Email address is required"
+  Messages.GENERIC.SUCCESS('Customer', 'created')  // → "Customer created successfully"
+
+  // Domain namespace — direct constant
+  Messages.GATEWAY.CIRCUIT_RESET_SUCCESS  // → "Circuit breaker reset successfully"
+  Messages.VALIDATION.EMAIL_INVALID       // → "Invalid email address"
+
+  // Used in Zod schemas
+  const schema = z.object({
+    email: z.string().min(1, Messages.VALIDATION.EMAIL_REQUIRED).email(Messages.VALIDATION.EMAIL_INVALID)
+  });
+  ```
+- **Benefits**:
+  - **i18n-ready**: Swap `messages.ts` implementation with a translation loader (`next-intl`, `react-intl`) — zero call-site changes required.
+  - **Auditable**: Every user-facing string is inventoried in one file.
+  - **DRY**: Tag-based factories eliminate near-duplicate string variants.
+- **Rules**:
+  - All validation messages in Zod schemas must reference `Messages.VALIDATION.*`.
+  - All toast messages must reference the appropriate domain constant (`Messages.GATEWAY.*`, `Messages.CUSTOMER.*`, etc.).
+  - Adding new domains: append a new `export const DOMAIN_NAME = { ... } as const` block and include it in the `Messages` composite export.
+
+---
+
+## 16. Centralized API Error Handler Pattern (Frontend)
+
+- **Why Used**: Without a central error handler, every page implements its own routing logic in `catch` blocks — some show field errors inline incorrectly, some show system errors as toasts correctly, others use `alert()`. This is inconsistent, untestable, and unauditable.
+- **Justification**: `handleApiError()` in `app/lib/api.ts` is the single decision point for all API error routing. It inspects the server response shape and routes accordingly.
+- **File Location**: [`app/lib/api.ts`](../payment-platform-portal/app/lib/api.ts)
+- **Routing Strategy**:
+  ```
+  Server response: { errors: { email: "Already exists" } }
+  → setFieldError('email', 'Already exists')   ← inline, directly on the field
+
+  Server response: { message: "Gateway unavailable" }
+  → NotificationService.error('Gateway unavailable')  ← error toast
+  ```
+- **Production Code Example**:
+  ```typescript
+  import { handleApiError } from '@/lib/api';
+  import { Messages } from '@/lib/messages';
+
+  // In any form catch block
+  } catch (err) {
+    handleApiError(err, setFieldError, Messages.CUSTOMER.CREATE_FAILED);
+  }
+
+  // For non-form actions (no field mapping needed)
+  } catch (err) {
+    handleApiError(err, undefined, Messages.GATEWAY.DELETE_FAILED);
+  }
+  ```
+- **Benefits**: Consistent error UX across the entire portal. One place to update when the backend error response schema changes.
+- **Rules**:
+  - Never write custom field/system error routing in page `catch` blocks. Always delegate to `handleApiError()`.
+  - Auth form errors (`login`, `signup`) are the only permitted exception — credential errors remain inline via `setFieldError('submit', msg)` since they are directly user-actionable on the same form.
+  - The fallback message must always come from `Messages.*` — never a hardcoded string.
+

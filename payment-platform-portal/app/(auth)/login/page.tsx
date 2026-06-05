@@ -4,9 +4,10 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import { authApi } from '@/lib/api';
+import { authApi, handleApiError } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { BRAND } from '@shared/constants/brand.constants';
+import { Messages } from '@/lib/messages';
 
 import { z } from 'zod';
 import {
@@ -18,8 +19,8 @@ import {
 } from '@components/validation';
 
 const LoginSchema = z.object({
-  email: z.string().min(1, 'Email address is required').email('Invalid email address'),
-  password: z.string().min(1, 'Password is required')
+  email: z.string().min(1, Messages.VALIDATION.EMAIL_REQUIRED).email(Messages.VALIDATION.EMAIL_INVALID),
+  password: z.string().min(1, Messages.VALIDATION.PASSWORD_REQUIRED)
 });
 
 export default function LoginPage() {

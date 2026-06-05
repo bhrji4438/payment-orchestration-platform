@@ -180,18 +180,22 @@ export function useFormValidation<T extends Record<string, any>>({
     setTouched({});
   }, [initialValues]);
 
+  const setFieldValue = useCallback((path: string, value: any) => {
+    setValues((prev) => setNestedValue(prev, path, value));
+  }, []);
+
+  const setFieldError = useCallback((path: string, error: string) => {
+    setErrors((prev) => ({ ...prev, [path]: error }));
+  }, []);
+
   return {
     values,
     errors,
     touched,
     setValues,
-    setFieldValue: (path: string, value: any) => {
-      setValues((prev) => setNestedValue(prev, path, value));
-    },
+    setFieldValue,
     setErrors,
-    setFieldError: (path: string, error: string) => {
-      setErrors((prev) => ({ ...prev, [path]: error }));
-    },
+    setFieldError,
     handleBlur,
     handleChange,
     handleSubmit,

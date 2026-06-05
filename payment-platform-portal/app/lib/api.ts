@@ -147,7 +147,7 @@ export const apiKeysApi = {
 };
 
 export const customersApi = {
-  getCustomers: (params?: { limit?: number; cursor?: string; search?: string }) => 
+  getCustomers: (params?: { limit?: number; cursor?: string; search?: string; activeOnly?: boolean; isActive?: boolean }) =>
     api.get('/v1/customers', { params }),
   getCustomer: (id: string) => api.get(`/v1/customers/${id}`),
   createCustomer: (data: any) => api.post('/v1/customers', data),
@@ -155,6 +155,60 @@ export const customersApi = {
   updateStatus: (id: string, isActive: boolean) => api.put(`/v1/customers/${id}/status`, { isActive })
 };
 
+
 export const transactionsApi = {
   getTransaction: (id: string) => api.get(`/v1/transactions/${id}`)
 };
+
+// ─── Centralized API Error Handler ─────────────────────────────────────────────
+//
+// Use this in every form catch block instead of custom error routing logic.
+//
+// Routing strategy (FAANG standard):
+//   - Field-specific server errors  → map inline via setFieldError
+//   - Global/system errors          → error toast via NotificationService
+//
+// This keeps error handling DRY, consistent, and auditable from one place.
+//
+// Usage in a form:
+//   } catch (err) {
+//     handleApiError(err, setFieldError, Messages.CUSTOMER.CREATE_FAILED);
+//   }
+
+import { NotificationService } from '@components/notification';
+import { Messages } from '@/lib/messages';
+
+type SetFieldError = (field: string, message: string) => void;
+
+/**
+ * Centralized API error handler.
+ *
+ * @param err           - The caught error from an API call
+ * @param setFieldError - Form's setFieldError function to map field-level errors inline
+ * @param fallbackMsg   - Fallback message shown as a toast if no structured error found
+ */
+export function handleApiError(
+  err: unknown,
+  setFieldError?: SetFieldError,
+  fallbackMsg?: string,
+): void {
+  const response = (err as any)?.response?.data;
+
+  // Field-specific server errors: { errors: { email: "Already exists" } }
+  if (setFieldError && response?.errors && typeof response.errors === 'object') {
+    Object.entries(response.errors as Record<string, string>).forEach(([field, msg]) => {
+      setFieldError(field, msg);
+    });
+    return;
+  }
+
+  // Extract the most meaningful error message
+  const message =
+    response?.message ||
+    response?.error?.message ||
+    response?.error ||
+    fallbackMsg ||
+    Messages.SYSTEM.UNKNOWN_ERROR;
+
+  NotificationService.error(typeof message === 'string' ? message : Messages.SYSTEM.UNKNOWN_ERROR);
+}

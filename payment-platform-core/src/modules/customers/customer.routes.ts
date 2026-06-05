@@ -22,13 +22,15 @@ router.post(
 
 router.get('/customers', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { search, pageSize, page, sort, order } = req.query;
+    const { search, limit, pageSize, page, sort, order, activeOnly, isActive } = req.query;
+    const activeOnlyParam = activeOnly ?? isActive;
     const result = await customerService.listCustomers(req.merchantId!, {
       search: search as string,
-      pageSize: pageSize ? Number(pageSize) : undefined,
+      pageSize: pageSize ? Number(pageSize) : limit ? Number(limit) : undefined,
       page: page ? Number(page) : undefined,
       sort: sort as string,
-      order: order as 'asc' | 'desc'
+      order: order as 'asc' | 'desc',
+      activeOnly: activeOnlyParam === 'true'
     });
     res.json(result);
   } catch (error: any) {

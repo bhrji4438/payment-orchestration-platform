@@ -129,6 +129,20 @@ Voids a pre-authorized payment.
   }
   ```
 
+### 4.5 GET `/v1/customers`
+Lists merchant customers with pagination and optional search.
+
+Query parameters:
+
+| Parameter | Type | Description |
+|---|---|---|
+| `search` | String | Case-insensitive token search across email, first name, last name, and company name. Multi-word searches match across fields, so `mohit g` can match `mohit gupta`. |
+| `activeOnly` | Boolean | When `true`, returns only active customers. Used by Virtual Terminal customer selection. |
+| `isActive` | Boolean | Alias for `activeOnly=true`. |
+| `pageSize` | Number | Number of records per page. |
+| `limit` | Number | Legacy alias for `pageSize`. |
+| `page` | Number | Page number, defaults to `1`. |
+
 ---
 
 ## 5. Unified Error Response Format

@@ -11,13 +11,14 @@ import {
   AlertCircle,
   Trash2
 } from 'lucide-react';
-import { gatewaysApi } from '@/lib/api';
+import { gatewaysApi, handleApiError } from '@/lib/api';
+import { Messages } from '@/lib/messages';
+import { useNotification } from '@components/notification';
 import {
   useFormValidation,
   ValidationField,
   InputErrorState,
   SelectErrorState,
-  ValidationMessage,
   FormErrorWrapper
 } from '@components/validation';
 
@@ -215,6 +216,7 @@ const renderCredentialFields = (
 };
 
 export default function GatewaysPage() {
+  const notification = useNotification();
   const [configs, setConfigs] = useState<any[]>([]);
   const [providers, setProviders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -300,8 +302,9 @@ export default function GatewaysPage() {
         setShowAddModal(false);
         addForm.resetForm();
         fetchData();
-      } catch (err: any) {
-        addForm.setFieldError('submit', err.response?.data?.error || 'Failed to add gateway');
+        notification.success(Messages.GATEWAY.CREATE_SUCCESS);
+      } catch (err) {
+        handleApiError(err, addForm.setFieldError, Messages.GATEWAY.CREATE_FAILED);
       }
     }
   });
@@ -371,8 +374,9 @@ export default function GatewaysPage() {
         setShowEditModal(false);
         editForm.resetForm();
         fetchData();
-      } catch (err: any) {
-        editForm.setFieldError('submit', err.response?.data?.error || 'Failed to update gateway');
+        notification.success(Messages.GATEWAY.UPDATE_SUCCESS);
+      } catch (err) {
+        handleApiError(err, editForm.setFieldError, Messages.GATEWAY.UPDATE_FAILED);
       }
     }
   });
@@ -401,8 +405,9 @@ export default function GatewaysPage() {
     try {
       await gatewaysApi.resetCircuit(id);
       fetchData();
+      notification.success(Messages.GATEWAY.CIRCUIT_RESET_SUCCESS);
     } catch (err) {
-      alert('Failed to reset circuit breaker');
+      notification.error(Messages.GATEWAY.CIRCUIT_RESET_FAILED);
     }
   };
 
@@ -411,8 +416,9 @@ export default function GatewaysPage() {
       try {
         await gatewaysApi.deleteConfiguration(id);
         fetchData();
+        notification.success(Messages.GATEWAY.DELETE_SUCCESS);
       } catch (err) {
-        alert('Failed to delete gateway');
+        notification.error(Messages.GATEWAY.DELETE_FAILED);
       }
     }
   };
@@ -628,7 +634,7 @@ export default function GatewaysPage() {
                 return renderCredentialFields(providerCode, addForm, false);
               })()}
 
-              <ValidationMessage id="add-submit-error" error={addForm.errors.submit} />
+
 
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-2 rounded-lg bg-zinc-800 text-sm font-medium text-zinc-300">
@@ -712,7 +718,7 @@ export default function GatewaysPage() {
 
               {renderCredentialFields(editForm.values.providerCode, editForm, true)}
 
-              <ValidationMessage id="edit-submit-error" error={editForm.errors.submit} />
+
 
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowEditModal(false)} className="flex-1 py-2 rounded-lg bg-zinc-800 text-sm font-medium text-zinc-300">

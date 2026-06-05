@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { authApi } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
 import { BRAND } from '@shared/constants/brand.constants';
+import { Messages } from '@/lib/messages';
 
 import { z } from 'zod';
 import {
@@ -18,10 +19,10 @@ import {
 } from '@components/validation';
 
 const SignupSchema = z.object({
-  merchantName: z.string().min(1, 'Business name is required'),
-  name: z.string().min(1, 'Your full name is required'),
-  email: z.string().min(1, 'Email address is required').email('Invalid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters')
+  merchantName: z.string().min(1, Messages.VALIDATION.BUSINESS_NAME_REQUIRED),
+  name: z.string().min(1, Messages.VALIDATION.FULL_NAME_REQUIRED),
+  email: z.string().min(1, Messages.VALIDATION.EMAIL_REQUIRED).email(Messages.VALIDATION.EMAIL_INVALID),
+  password: z.string().min(8, Messages.VALIDATION.PASSWORD_MIN_LENGTH)
 });
 
 export default function SignupPage() {

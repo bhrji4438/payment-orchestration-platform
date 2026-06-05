@@ -12,6 +12,7 @@ Before modifying code, AI agents must review the following documentation:
 * `docs/architecture/shared_library.md`
 * `docs/api/api_specification.md`
 * `docs/database/database_schema.md`
+* `docs/frontend/validation-notification-standard.md` ← **Required before touching any portal form, validation, or user feedback**
 
 ## Architecture Rules
 
@@ -69,6 +70,17 @@ All business data must come from APIs. If an API does not exist, build the backe
 * **Always** use schema-driven tables.
 * **Always** use API-driven data.
 * **Never** hardcode table columns or dropdown actions.
+
+### Validation & Notification Rules
+
+* **Never** use `alert()`, custom banners, or custom toast implementations.
+* **Always** use `@components/notification` (`useNotification` hook or `NotificationService` singleton) for all user feedback.
+* **Never** hardcode user-facing strings in components, Zod schemas, or catch blocks.
+* **Always** import strings from `app/lib/messages.ts` (`Messages.*`).
+* **Never** write custom error routing in `catch` blocks.
+* **Always** use `handleApiError()` from `@/lib/api` in all catch blocks.
+* **Never** show validation errors as toasts or banners — inline only, via `@components/validation`.
+* **See**: `docs/frontend/validation-notification-standard.md` for the full standard.
 
 ## Backend Rules
 

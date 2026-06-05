@@ -11,8 +11,11 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { apiKeysApi } from '@/lib/api';
+import { Messages } from '@/lib/messages';
+import { useNotification } from '@components/notification';
 
 export default function DeveloperPage() {
+  const notification = useNotification();
   const [keys, setKeys] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [newPlainKey, setNewPlainKey] = useState<string | null>(null);
@@ -41,15 +44,16 @@ export default function DeveloperPage() {
       const res = await apiKeysApi.rotate({ name: 'Default API Key' });
       setNewPlainKey(res.data.apiKeyPlain);
       fetchKeys();
+      notification.success(Messages.DEVELOPER.KEY_ROTATED_SUCCESS);
     } catch (err) {
-      alert('Failed to rotate key');
+      notification.error(Messages.DEVELOPER.KEY_ROTATE_FAILED);
       setLoading(false);
     }
   };
 
   const copyKey = (keyText: string) => {
     navigator.clipboard.writeText(keyText);
-    alert('Key copied to clipboard');
+    notification.success(Messages.DEVELOPER.KEY_COPIED_SUCCESS);
   };
 
   return (
@@ -156,10 +160,10 @@ export default function DeveloperPage() {
           <div className="mt-6 pt-6 border-t border-zinc-800">
             <h4 className="text-sm font-semibold text-zinc-300 mb-3">Webhook Simulator</h4>
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => alert('Coming soon in Phase 4')} className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded text-xs text-zinc-300 font-mono transition-colors">
+              <button onClick={() => notification.info(Messages.DEVELOPER.FEATURE_COMING_SOON)} className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded text-xs text-zinc-300 font-mono transition-colors">
                 payment.captured
               </button>
-              <button onClick={() => alert('Coming soon in Phase 4')} className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded text-xs text-zinc-300 font-mono transition-colors">
+              <button onClick={() => notification.info(Messages.DEVELOPER.FEATURE_COMING_SOON)} className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded text-xs text-zinc-300 font-mono transition-colors">
                 payment.failed
               </button>
             </div>

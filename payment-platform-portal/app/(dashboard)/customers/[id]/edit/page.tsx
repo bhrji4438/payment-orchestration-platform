@@ -2,17 +2,19 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import { customersApi } from '@/lib/api';
+import { customersApi, handleApiError } from '@/lib/api';
+import { Messages } from '@/lib/messages';
 import { z } from 'zod';
+import { useNotification } from '@components/notification';
 import {
   useFormValidation,
   ValidationField,
   InputErrorState,
   SelectErrorState,
   CheckboxErrorState,
-  ValidationMessage,
   FormErrorWrapper
 } from '@components/validation';
 
@@ -20,7 +22,7 @@ const CustomerSchema = z.object({
   firstName: z.string().optional(),
   lastName: z.string().optional(),
   companyName: z.string().optional(),
-  email: z.string().min(1, 'Email address is required').email('Invalid email address'),
+  email: z.string().min(1, Messages.VALIDATION.EMAIL_REQUIRED).email(Messages.VALIDATION.EMAIL_INVALID),
   phone: z.string().optional(),
   mobilePhone: z.string().optional(),
   billingLine1: z.string().optional(),
@@ -40,6 +42,8 @@ const CustomerSchema = z.object({
 export default function EditCustomerPage({ params }: { params: Promise<{ id: string }> }) {
   const unwrappedParams = React.use(params);
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const notification = useNotification();
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [sameAsBilling, setSameAsBilling] = useState(false);
@@ -113,9 +117,11 @@ export default function EditCustomerPage({ params }: { params: Promise<{ id: str
 
       try {
         await customersApi.updateCustomer(unwrappedParams.id, payload);
+        await queryClient.invalidateQueries({ queryKey: ['/v1/customers'] });
+        notification.success(Messages.CUSTOMER.UPDATE_SUCCESS);
         router.push('/customers');
-      } catch (err: any) {
-        setFieldError('submit', err.response?.data?.error || 'Failed to update customer');
+      } catch (err) {
+        handleApiError(err, setFieldError, Messages.CUSTOMER.UPDATE_FAILED);
         setLoading(false);
       }
     }
@@ -147,7 +153,7 @@ export default function EditCustomerPage({ params }: { params: Promise<{ id: str
         });
       })
       .catch(err => {
-        setFieldError('submit', 'Failed to load customer profile');
+        handleApiError(err, setFieldError, Messages.CUSTOMER.LOAD_FAILED);
       })
       .finally(() => {
         setInitialLoading(false);
@@ -319,8 +325,6 @@ export default function EditCustomerPage({ params }: { params: Promise<{ id: str
         </div>
 
         <div className="flex flex-col gap-4">
-          <ValidationMessage id="submit-error" error={errors.submit} />
-          
           <div className="flex justify-end gap-3">
             <Link href="/customers" className="px-6 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
               Cancel

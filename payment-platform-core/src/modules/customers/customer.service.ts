@@ -84,21 +84,31 @@ export class CustomerService {
     return updated;
   }
 
-  public async listCustomers(merchantId: string, params: { search?: string, pageSize?: number, page?: number, sort?: string, order?: 'asc' | 'desc' }) {
-    const { search, pageSize = 10, page = 1, sort, order } = params;
+  public async listCustomers(
+    merchantId: string,
+    params: { search?: string, pageSize?: number, page?: number, sort?: string, order?: 'asc' | 'desc', activeOnly?: boolean }
+  ) {
+    const { search, pageSize = 10, page = 1, sort, order, activeOnly = false } = params;
     
     const where: any = {
       merchantId,
       deletedAt: null
     };
 
-    if (search) {
-      where.OR = [
-        { email: { contains: search, mode: 'insensitive' } },
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
-        { companyName: { contains: search, mode: 'insensitive' } }
-      ];
+    if (activeOnly) {
+      where.isActive = true;
+    }
+
+    const searchTerms = search?.trim().split(/\s+/).filter(Boolean) ?? [];
+    if (searchTerms.length > 0) {
+      where.AND = searchTerms.map((term) => ({
+        OR: [
+          { email: { contains: term, mode: 'insensitive' } },
+          { firstName: { contains: term, mode: 'insensitive' } },
+          { lastName: { contains: term, mode: 'insensitive' } },
+          { companyName: { contains: term, mode: 'insensitive' } }
+        ]
+      }));
     }
 
     const take = Number(pageSize);

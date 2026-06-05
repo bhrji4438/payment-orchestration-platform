@@ -14,7 +14,8 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
-import { gatewaysApi, paymentsApi, customersApi } from '@/lib/api';
+import { gatewaysApi, paymentsApi, customersApi, handleApiError } from '@/lib/api';
+import { Messages } from '@/lib/messages';
 import { UnifiedPaymentRequestSchema } from '@shared/validators/payment.schemas';
 import {
   useFormValidation,
@@ -22,7 +23,6 @@ import {
   InputErrorState,
   SelectErrorState,
   CheckboxErrorState,
-  ValidationMessage,
   FormErrorWrapper
 } from '@components/validation';
 
@@ -183,13 +183,13 @@ export default function VirtualTerminalPage() {
       }
 
       if (!selectedCustomer) {
-        formErrors['customerId'] = 'Please select or create a customer profile';
+        formErrors['customerId'] = Messages.VALIDATION.CUSTOMER_REQUIRED;
       }
 
       if (!formValues.email) {
-        formErrors['email'] = 'Transaction email address is required';
+        formErrors['email'] = Messages.VALIDATION.EMAIL_REQUIRED;
       } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formValues.email)) {
-        formErrors['email'] = 'Invalid email address';
+        formErrors['email'] = Messages.VALIDATION.EMAIL_INVALID;
       }
 
       return formErrors;
@@ -262,14 +262,14 @@ export default function VirtualTerminalPage() {
         const responseData = res.data;
         router.push(`/transactions/${responseData.id}/receipt`);
       } catch (err: any) {
+        // If we have a payment ID, the gateway processed it but it failed — go to receipt page
         const failedPaymentId = err.response?.data?.paymentId;
         if (failedPaymentId) {
           router.push(`/transactions/${failedPaymentId}/receipt`);
           return;
         }
-
-        const errMsg = err.response?.data?.error?.message || err.response?.data?.error || err.message || 'Transaction declined by gateway config.';
-        setFieldError('submit', errMsg);
+        // System / gateway error — show as error toast
+        handleApiError(err, undefined, Messages.PAYMENT.PROCESSING_FAILED);
         setIsProcessing(false);
       }
     }
@@ -360,7 +360,7 @@ export default function VirtualTerminalPage() {
 
     setIsSearchingCustomers(true);
     const delayDebounce = setTimeout(() => {
-      customersApi.getCustomers({ search: customerSearch, limit: 10 })
+      customersApi.getCustomers({ search: customerSearch, limit: 10, activeOnly: true })
         .then((res) => {
           setSearchResults(res.data.data);
           setIsSearchingCustomers(false);
@@ -1175,8 +1175,6 @@ export default function VirtualTerminalPage() {
                 <>Process Payment</>
               )}
             </button>
-            
-            <ValidationMessage id="submit-error" error={errors.submit} />
           </div>
         </FormErrorWrapper>
       )}
