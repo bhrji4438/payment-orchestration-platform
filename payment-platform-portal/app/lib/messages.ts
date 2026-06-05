@@ -180,6 +180,21 @@ export const PAYMENT = {
   DUPLICATE_DETECTED: 'Duplicate transaction detected. Please check your records.',
 } as const;
 
+export const TRANSACTION = {
+  LOAD_FAILED: GENERIC.FAILED('load transactions'),
+  RECEIPT_LOAD_FAILED: GENERIC.FAILED('load transaction receipt details'),
+  CAPTURE_SUCCESS: GENERIC.SUCCESS('Transaction', 'captured'),
+  CAPTURE_FAILED: GENERIC.FAILED('capture transaction'),
+  VOID_SUCCESS: GENERIC.SUCCESS('Transaction', 'voided'),
+  VOID_FAILED: GENERIC.FAILED('void transaction'),
+  REFUND_SUCCESS: GENERIC.SUCCESS('Refund', 'processed'),
+  REFUND_FAILED: GENERIC.FAILED('process refund'),
+  REFUND_AMOUNT_REQUIRED: GENERIC.REQUIRED('Refund amount'),
+  REFUND_AMOUNT_EXCEEDS_BALANCE: 'Refund amount cannot exceed the refundable balance',
+  CONFIRM_CAPTURE: 'Capture this authorized transaction?',
+  CONFIRM_VOID: 'Void this authorized transaction?',
+} as const;
+
 // ─── Domain: Developer / API Keys ─────────────────────────────────────────────
 
 export const DEVELOPER = {
@@ -209,6 +224,7 @@ export const Messages = {
   CUSTOMER,
   GATEWAY,
   PAYMENT,
+  TRANSACTION,
   DEVELOPER,
   SYSTEM,
 } as const;

@@ -100,6 +100,10 @@ export const CapturePaymentSchema = z.object({
   amount: z.number().positive('Amount must be a positive number')
 });
 
+export const TransactionPathParamsSchema = z.object({
+  id: z.string().uuid('Transaction ID must be a valid UUID')
+});
+
 export const RefundPaymentSchema = z.object({
   paymentId: z.string().uuid('Payment ID must be a valid UUID'),
   amount: z.number().positive('Amount must be a positive number'),
@@ -110,3 +114,30 @@ export const VoidPaymentSchema = z.object({
   paymentId: z.string().uuid('Payment ID must be a valid UUID'),
   reason: z.string().optional()
 });
+
+const QueryArraySchema = z.union([z.string(), z.array(z.string())]).optional();
+
+export const ListTransactionsQuerySchema = z.object({
+  search: z.string().trim().max(100).optional(),
+  status: QueryArraySchema,
+  type: QueryArraySchema,
+  paymentMethod: QueryArraySchema,
+  gateway: QueryArraySchema,
+  dateFrom: z.string().datetime().optional(),
+  dateTo: z.string().datetime().optional(),
+  amountMin: z.coerce.number().nonnegative().optional(),
+  amountMax: z.coerce.number().nonnegative().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(100).default(25),
+  pageSize: z.coerce.number().int().positive().max(100).optional(),
+  sortBy: z.enum(['createdAt', 'amount', 'customer', 'status']).default('createdAt'),
+  sort: z.enum(['createdAt', 'amount', 'customer', 'status']).optional(),
+  sortOrder: z.enum(['asc', 'desc']).default('desc'),
+  order: z.enum(['asc', 'desc']).optional()
+}).refine(
+  (query) => query.amountMin === undefined || query.amountMax === undefined || query.amountMin <= query.amountMax,
+  {
+    message: 'Minimum amount must be less than or equal to maximum amount',
+    path: ['amountMin']
+  }
+);

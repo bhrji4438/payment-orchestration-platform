@@ -67,6 +67,14 @@ export class TransactionRepository {
   }
 }
 
+export class TransactionEventRepository {
+  constructor(private readonly tx: Prisma.TransactionClient) {}
+
+  public async create(data: Prisma.TransactionEventUncheckedCreateInput) {
+    return this.tx.transactionEvent.create({ data });
+  }
+}
+
 export class OutboxEventRepository {
   constructor(private readonly tx: Prisma.TransactionClient) {}
 
@@ -89,6 +97,7 @@ export class UnitOfWork {
       repos: {
         payments: PaymentRepository;
         transactions: TransactionRepository;
+        transactionEvents: TransactionEventRepository;
         outbox: OutboxEventRepository;
       },
       tx: Prisma.TransactionClient
@@ -97,8 +106,9 @@ export class UnitOfWork {
     return prisma.$transaction(async (tx) => {
       const payments = new PaymentRepository(tx);
       const transactions = new TransactionRepository(tx);
+      const transactionEvents = new TransactionEventRepository(tx);
       const outbox = new OutboxEventRepository(tx);
-      return callback({ payments, transactions, outbox }, tx);
+      return callback({ payments, transactions, transactionEvents, outbox }, tx);
     });
   }
 }

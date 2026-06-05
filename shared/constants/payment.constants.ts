@@ -9,6 +9,38 @@ export const TRANSACTION_STATUS = {
 
 export type TransactionStatus = typeof TRANSACTION_STATUS[keyof typeof TRANSACTION_STATUS];
 
+export const MERCHANT_TRANSACTION_TYPE = {
+  SALE: 'SALE',
+  AUTH: 'AUTH',
+  REFUND: 'REFUND',
+  VOID: 'VOID'
+} as const;
+
+export type MerchantTransactionType = typeof MERCHANT_TRANSACTION_TYPE[keyof typeof MERCHANT_TRANSACTION_TYPE];
+
+export const TRANSACTION_EVENT_TYPE = {
+  AUTHORIZED: 'AUTHORIZED',
+  CAPTURED: 'CAPTURED',
+  VOIDED: 'VOIDED',
+  REFUNDED: 'REFUNDED',
+  FAILED: 'FAILED',
+  PENDING: 'PENDING'
+} as const;
+
+export type TransactionEventType = typeof TRANSACTION_EVENT_TYPE[keyof typeof TRANSACTION_EVENT_TYPE];
+
+export const PAYMENT_METHOD_BRAND = {
+  VISA: 'VISA',
+  MASTERCARD: 'MASTERCARD',
+  AMEX: 'AMEX',
+  DISCOVER: 'DISCOVER',
+  ECHECK: 'ECHECK',
+  APPLE_PAY: 'APPLE_PAY',
+  GOOGLE_PAY: 'GOOGLE_PAY',
+  ACH: 'ACH',
+  UNKNOWN: 'UNKNOWN'
+} as const;
+
 export const GATEWAY_PROVIDERS = {
   STRIPE: 'STRIPE',
   AUTHORIZE_NET: 'AUTHORIZE_NET',

@@ -5,6 +5,8 @@ import { CircuitBreaker } from '@core/modules/gateways/circuit-breaker';
 import { generateUuidV7 } from '@shared/ids/generate-uuid-v7';
 import { logger } from '@shared/logger/logger';
 import { credentialEncryptionService } from '@shared/crypto/credential-encryption';
+import { MERCHANT_TRANSACTION_TYPE, TRANSACTION_EVENT_TYPE, TRANSACTION_STATUS } from '@shared/constants/payment.constants';
+import { getMerchantTransactionType } from '@shared/transactions/transaction-lifecycle';
 
 function redactCardData(rawResponse: string | undefined): string | undefined {
   if (!rawResponse) return rawResponse;
@@ -73,6 +75,11 @@ export class PaymentService {
     const savedPaymentDetails = this.redactSensitivePaymentDetails(params.paymentMethodType, params.paymentDetails);
 
     const paymentId = generateUuidV7();
+    const transactionType = getMerchantTransactionType({
+      capture: params.paymentMethodType === 'echeck' ? true : params.capture,
+      paymentMethodType: params.paymentMethodType
+    });
+    const receiptNumber = `rcpt_${paymentId.replace(/-/g, '')}`;
 
     let cardBrand = 'UNKNOWN';
     let cardLastFour = 'MOCK';
@@ -100,6 +107,9 @@ export class PaymentService {
         amount: params.amount,
         currency: resolvedCurrency,
         status: 'PENDING',
+        transactionType,
+        refundableAmount: 0,
+        receiptNumber,
         cardBrand,
         cardLastFour,
         cardExpiry,
@@ -231,10 +241,26 @@ export class PaymentService {
           {
             status: finalStatus,
             gatewayConfigId: finalGatewayConfigId,
-            gatewayToken: successResponse.transactionReference
+            gatewayToken: successResponse.transactionReference,
+            gatewayTransactionId: successResponse.transactionReference,
+            refundableAmount: finalStatus === TRANSACTION_STATUS.CAPTURED ? params.amount : 0
           },
           payment.version
         );
+
+        await repos.transactionEvents.create({
+          id: generateUuidV7(),
+          paymentId,
+          eventType: finalStatus === TRANSACTION_STATUS.CAPTURED ? TRANSACTION_EVENT_TYPE.CAPTURED : TRANSACTION_EVENT_TYPE.AUTHORIZED,
+          fromStatus: payment.status,
+          toStatus: finalStatus,
+          amount: params.amount,
+          gatewayTxnId: successResponse.transactionReference || null,
+          metadata: {
+            gatewayConfigId: finalGatewayConfigId,
+            transactionType
+          }
+        });
 
         await repos.transactions.create({
           id: generateUuidV7(),
@@ -262,6 +288,16 @@ export class PaymentService {
           payment.version
         );
 
+        await repos.transactionEvents.create({
+          id: generateUuidV7(),
+          paymentId,
+          eventType: TRANSACTION_EVENT_TYPE.FAILED,
+          fromStatus: payment.status,
+          toStatus: TRANSACTION_STATUS.FAILED,
+          amount: params.amount,
+          reason: lastError?.message || 'Gateway routing exhausted.'
+        });
+
         await repos.outbox.create('payment.failed', paymentId, {
           paymentId,
           merchantId: params.merchantId,
@@ -277,8 +313,11 @@ export class PaymentService {
   public async capturePayment(paymentId: string, amount: number) {
     return await uow.run(async (repos, tx) => {
       const payment = await repos.payments.findById(paymentId);
-      if (!payment || payment.status !== 'AUTHORIZED') {
+      if (!payment || payment.status !== TRANSACTION_STATUS.AUTHORIZED) {
         throw new Error('Payment is not in AUTHORIZED state.');
+      }
+      if (amount <= 0 || amount > Number(payment.amount)) {
+        throw new Error('Capture amount must be greater than 0 and cannot exceed the authorized amount.');
       }
       if (!payment.gatewayConfigId || !payment.gatewayToken) {
         throw new Error('Missing gateway reference details for capture.');
@@ -325,16 +364,41 @@ export class PaymentService {
 
       const updatedPayment = await repos.payments.update(
         paymentId,
-        { status: 'CAPTURED' },
+        {
+          status: TRANSACTION_STATUS.CAPTURED,
+          refundableAmount: amount,
+          gatewayTransactionId: gatewayResult.transactionReference || payment.gatewayToken
+        },
         payment.version
       );
 
-      await repos.transactions.create({
+      const pendingCredit = await tx.transaction.findFirst({
+        where: { paymentId, type: 'CREDIT', status: 'PENDING', deletedAt: null }
+      });
+      if (pendingCredit) {
+        await tx.transaction.update({
+          where: { id: pendingCredit.id },
+          data: { amount, status: 'SETTLED' }
+        });
+      } else {
+        await repos.transactions.create({
+          id: generateUuidV7(),
+          paymentId,
+          amount,
+          type: 'CREDIT',
+          status: 'SETTLED'
+        });
+      }
+
+      await repos.transactionEvents.create({
         id: generateUuidV7(),
         paymentId,
+        eventType: TRANSACTION_EVENT_TYPE.CAPTURED,
+        fromStatus: payment.status,
+        toStatus: TRANSACTION_STATUS.CAPTURED,
         amount,
-        type: 'CREDIT',
-        status: 'SETTLED'
+        gatewayTxnId: gatewayResult.transactionReference || payment.gatewayToken,
+        metadata: { capturedFromAuthorization: true }
       });
 
       await repos.outbox.create('payment.captured', paymentId, {
@@ -352,8 +416,12 @@ export class PaymentService {
   public async refundPayment(paymentId: string, amount: number, reason?: string) {
     return await uow.run(async (repos, tx) => {
       const payment = await repos.payments.findById(paymentId);
-      if (!payment || payment.status !== 'CAPTURED') {
+      if (!payment || payment.status !== TRANSACTION_STATUS.CAPTURED) {
         throw new Error('Payment is not in CAPTURED state.');
+      }
+      const refundableAmount = Number(payment.refundableAmount ?? payment.amount);
+      if (amount <= 0 || amount > refundableAmount) {
+        throw new Error('Refund amount must be greater than 0 and cannot exceed the refundable balance.');
       }
       if (!payment.gatewayConfigId || !payment.gatewayToken) {
         throw new Error('Missing gateway reference details for refund.');
@@ -395,9 +463,15 @@ export class PaymentService {
         throw new Error(`Refund failed: ${gatewayResult.responseMessage}`);
       }
 
+      const nextRefundableAmount = Math.max(0, refundableAmount - amount);
+      const nextStatus = nextRefundableAmount === 0 ? TRANSACTION_STATUS.REFUNDED : TRANSACTION_STATUS.CAPTURED;
       const updatedPayment = await repos.payments.update(
         paymentId,
-        { status: 'REFUNDED' },
+        {
+          status: nextStatus,
+          refundableAmount: nextRefundableAmount,
+          transactionType: nextStatus === TRANSACTION_STATUS.REFUNDED ? MERCHANT_TRANSACTION_TYPE.REFUND : payment.transactionType
+        },
         payment.version
       );
 
@@ -417,6 +491,22 @@ export class PaymentService {
         gatewayTxnId: gatewayResult.transactionReference
       });
 
+      await repos.transactionEvents.create({
+        id: generateUuidV7(),
+        paymentId,
+        eventType: TRANSACTION_EVENT_TYPE.REFUNDED,
+        fromStatus: payment.status,
+        toStatus: nextStatus,
+        amount,
+        gatewayTxnId: gatewayResult.transactionReference || null,
+        reason,
+        metadata: {
+          refundId,
+          refundableAmount: nextRefundableAmount,
+          fullRefund: nextRefundableAmount === 0
+        }
+      });
+
       return updatedPayment;
     });
   }
@@ -424,7 +514,7 @@ export class PaymentService {
   public async voidPayment(paymentId: string, reason?: string) {
     return await uow.run(async (repos, tx) => {
       const payment = await repos.payments.findById(paymentId);
-      if (!payment || payment.status !== 'AUTHORIZED') {
+      if (!payment || payment.status !== TRANSACTION_STATUS.AUTHORIZED) {
         throw new Error('Payment is not in AUTHORIZED state.');
       }
       if (!payment.gatewayConfigId || !payment.gatewayToken) {
@@ -467,11 +557,26 @@ export class PaymentService {
 
       const updatedPayment = await repos.payments.update(
         paymentId,
-        { status: 'VOIDED' },
+        {
+          status: TRANSACTION_STATUS.VOIDED,
+          transactionType: MERCHANT_TRANSACTION_TYPE.VOID,
+          refundableAmount: 0
+        },
         payment.version
       );
 
-      await repos.outbox.create('payment.failed', paymentId, {
+      await repos.transactionEvents.create({
+        id: generateUuidV7(),
+        paymentId,
+        eventType: TRANSACTION_EVENT_TYPE.VOIDED,
+        fromStatus: payment.status,
+        toStatus: TRANSACTION_STATUS.VOIDED,
+        gatewayTxnId: gatewayResult.transactionReference || null,
+        reason,
+        metadata: { voidId }
+      });
+
+      await repos.outbox.create('payment.voided', paymentId, {
         paymentId,
         merchantId: payment.merchantId,
         status: 'VOIDED',
@@ -499,13 +604,17 @@ export class PaymentService {
       const gatewayResult = await gateway.getTransaction(payment.gatewayToken);
 
       if (gatewayResult.success) {
-        const isCurrentlyPending = payment.status === 'PENDING' || payment.status === 'AUTHORIZED';
+        const isCurrentlyPending = payment.status === TRANSACTION_STATUS.PENDING || payment.status === TRANSACTION_STATUS.AUTHORIZED;
         if (isCurrentlyPending) {
-          const finalStatus = 'CAPTURED';
+          const finalStatus = TRANSACTION_STATUS.CAPTURED;
           
           const updatedPayment = await repos.payments.update(
             paymentId,
-            { status: finalStatus },
+            {
+              status: finalStatus,
+              refundableAmount: payment.amount,
+              gatewayTransactionId: payment.gatewayToken
+            },
             payment.version
           );
 
@@ -530,14 +639,25 @@ export class PaymentService {
             gatewayTxnId: payment.gatewayToken
           });
 
+          await repos.transactionEvents.create({
+            id: generateUuidV7(),
+            paymentId,
+            eventType: TRANSACTION_EVENT_TYPE.CAPTURED,
+            fromStatus: payment.status,
+            toStatus: finalStatus,
+            amount: payment.amount,
+            gatewayTxnId: payment.gatewayToken,
+            metadata: { source: 'status_sync' }
+          });
+
           return updatedPayment;
         }
       } else {
-        const isNotFailed = payment.status !== 'FAILED' && payment.status !== 'VOIDED';
+        const isNotFailed = payment.status !== TRANSACTION_STATUS.FAILED && payment.status !== TRANSACTION_STATUS.VOIDED;
         if (isNotFailed) {
           const updatedPayment = await repos.payments.update(
             paymentId,
-            { status: 'FAILED' },
+            { status: TRANSACTION_STATUS.FAILED },
             payment.version
           );
 
@@ -546,6 +666,17 @@ export class PaymentService {
             merchantId: payment.merchantId,
             amount: Number(payment.amount),
             error: gatewayResult.responseMessage || 'Gateway transaction status reported failure.'
+          });
+
+          await repos.transactionEvents.create({
+            id: generateUuidV7(),
+            paymentId,
+            eventType: TRANSACTION_EVENT_TYPE.FAILED,
+            fromStatus: payment.status,
+            toStatus: TRANSACTION_STATUS.FAILED,
+            amount: payment.amount,
+            reason: gatewayResult.responseMessage || 'Gateway transaction status reported failure.',
+            metadata: { source: 'status_sync' }
           });
 
           return updatedPayment;

@@ -82,6 +82,25 @@ graph TD
     end
 ```
 
+### 2.6 Transaction Lifecycle and Merchant-Facing Records
+
+Merchant-facing transaction management is represented by the `payments` table. Ledger rows in `transactions` remain accounting records and are not displayed as separate merchant transactions.
+
+AUTH to CAPTURE handling updates the original payment record from `AUTHORIZED` to `CAPTURED`; it does not create a second merchant-facing transaction. This preserves one visible transaction ID across authorization, capture, void, and refund workflows.
+
+Every lifecycle transition writes an immutable row to `transaction_events` in the same database transaction as the payment status update. Receipt and details pages render their timeline from `transaction_events` rather than reconstructing history from the current payment status.
+
+Action eligibility is centralized in `shared/transactions/transaction-lifecycle.ts` and consumed by both the core API and the portal:
+
+| Status | Eligible Actions |
+|---|---|
+| `AUTHORIZED` | View Receipt, Capture, Void, Print Receipt |
+| `CAPTURED` | View Receipt, Refund, Print Receipt |
+| `REFUNDED` | View Receipt, Print Receipt |
+| `VOIDED` | View Receipt, Print Receipt |
+| `FAILED` | View Details |
+| `PENDING` | View Details |
+
 ### 2.1 Repository & Unit of Work (UoW) Patterns
 To guarantee database consistency and transaction integrity, the core engine isolates database operations behind the Repository and Unit of Work patterns:
 - **Repositories**: Standardize queries and updates per entity (e.g., `PaymentRepository`, `PaymentAttemptRepository`, `OutboxEventRepository`).

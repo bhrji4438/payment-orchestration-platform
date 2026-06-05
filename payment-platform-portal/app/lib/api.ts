@@ -157,7 +157,10 @@ export const customersApi = {
 
 
 export const transactionsApi = {
-  getTransaction: (id: string) => api.get(`/v1/transactions/${id}`)
+  getTransaction: (id: string) => api.get(`/v1/transactions/${id}`),
+  capture: (id: string, amount: number, config?: any) => api.post(`/v1/transactions/${id}/capture`, { amount }, config),
+  void: (id: string, reason?: string, config?: any) => api.post(`/v1/transactions/${id}/void`, { reason }, config),
+  refund: (id: string, amount: number, reason?: string, config?: any) => api.post(`/v1/transactions/${id}/refund`, { amount, reason }, config)
 };
 
 // ─── Centralized API Error Handler ─────────────────────────────────────────────

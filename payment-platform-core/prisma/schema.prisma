@@ -194,12 +194,16 @@ model Payment {
   amount        Decimal  @db.Decimal(18, 4)
   currency      String   @default("USD")
   status        String   @default("PENDING") // PENDING, AUTHORIZED, CAPTURED, FAILED, REFUNDED, VOIDED
+  transactionType String @default("SALE") // SALE, AUTH, REFUND, VOID
+  refundableAmount Decimal @default(0) @db.Decimal(18, 4)
   version       Int      @default(1) // Optimistic Locking
   
   cardBrand     String?
   cardLastFour  String?
   cardExpiry    String? // MM/YYYY
   gatewayToken  String?
+  gatewayTransactionId String?
+  receiptNumber String? @unique
 
   paymentMethodType String?
   customerSnapshot  Json?
@@ -214,6 +218,7 @@ model Payment {
   updatedBy String?
 
   attempts     PaymentAttempt[]
+  events       TransactionEvent[]
   transactions Transaction[]
   refunds      Refund[]
   voids        Void[]
@@ -221,7 +226,33 @@ model Payment {
   settlementItems SettlementItem[]
 
   @@index([merchantId, status])
+  @@index([merchantId, status, createdAt])
+  @@index([merchantId, transactionType])
+  @@index([merchantId, cardBrand])
+  @@index([merchantId, gatewayConfigId])
+  @@index([merchantId, amount, createdAt])
   @@map("payments")
+}
+
+model TransactionEvent {
+  id           String   @id @db.Uuid
+  paymentId    String   @db.Uuid
+  payment      Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  eventType    String
+  fromStatus   String?
+  toStatus     String
+  amount       Decimal? @db.Decimal(18, 4)
+  gatewayTxnId String?
+  actorType    String   @default("SYSTEM")
+  reason       String?
+  metadata     Json?
+
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  @@index([paymentId, createdAt])
+  @@index([eventType, createdAt])
+  @@map("transaction_events")
 }
 
 model PaymentAttempt {

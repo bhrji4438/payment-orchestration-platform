@@ -145,6 +145,105 @@ Query parameters:
 
 ---
 
+### 4.6 GET `/v1/transactions`
+Lists merchant-facing transactions. This endpoint returns one row per payment, including AUTH transactions after capture as the same transaction with updated status.
+
+Query parameters:
+
+| Parameter | Type | Description |
+|---|---|---|
+| `search` | String | Server-side search across transaction ID, customer name, customer email, last4, gateway transaction ID, and receipt number. UUID transaction ID search is exact. |
+| `status` | String or CSV | `AUTHORIZED`, `CAPTURED`, `REFUNDED`, `VOIDED`, `FAILED`, `PENDING`. |
+| `type` | String or CSV | `SALE`, `AUTH`, `REFUND`, `VOID`. |
+| `paymentMethod` | String or CSV | Payment brand/method such as `VISA`, `MASTERCARD`, `AMEX`, `DISCOVER`, `ECHECK`, `APPLE_PAY`, `GOOGLE_PAY`. |
+| `gateway` | String or CSV | Gateway configuration ID, provider code, provider name, or display name. |
+| `dateFrom` / `dateTo` | ISO datetime | Inclusive created-at range. |
+| `amountMin` / `amountMax` | Number | Inclusive amount range. |
+| `page` / `limit` | Number | Page and page size. `pageSize` remains supported for the portal DataTable. |
+| `sortBy` / `sortOrder` | String | Sort by `createdAt`, `amount`, `customer`, or `status`; order `asc` or `desc`. |
+
+Response:
+
+```json
+{
+  "data": [
+    {
+      "id": "01917c4a-3b2f-7000-8000-a1b2c3d4e5f6",
+      "type": "AUTH",
+      "status": "CAPTURED",
+      "amount": 100,
+      "currency": "USD",
+      "paymentMethodBrand": "VISA",
+      "last4": "4242",
+      "gateway": "Stripe Sandbox",
+      "gatewayTransactionId": "pi_123",
+      "receiptNumber": "rcpt_01917c4a3b2f70008000a1b2c3d4e5f6",
+      "refundableAmount": 100,
+      "availableActions": ["viewReceipt", "refund", "printReceipt"]
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 25,
+    "total": 500,
+    "totalPages": 20
+  },
+  "filters": {
+    "availableGateways": [],
+    "availableMethods": []
+  }
+}
+```
+
+### 4.7 POST `/v1/transactions/{id}/capture`
+Captures an authorized transaction. The payment row is updated to `CAPTURED`; no second merchant-facing transaction is created.
+
+Request:
+
+```json
+{ "amount": 100 }
+```
+
+Validation:
+
+- Payment must be `AUTHORIZED`.
+- Capture amount must be greater than zero and no more than the authorized amount.
+- A `CAPTURED` transaction event is written atomically with the payment update.
+
+### 4.8 POST `/v1/transactions/{id}/void`
+Voids an authorized transaction.
+
+Request:
+
+```json
+{ "reason": "Order cancelled" }
+```
+
+Validation:
+
+- Payment must be `AUTHORIZED`.
+- A `VOIDED` transaction event is written atomically with the payment update.
+
+### 4.9 POST `/v1/transactions/{id}/refund`
+Refunds a captured transaction.
+
+Request:
+
+```json
+{ "amount": 50, "reason": "Customer request" }
+```
+
+Validation:
+
+- Payment must be `CAPTURED`.
+- Amount must be greater than zero and no more than `refundableAmount`.
+- A `REFUNDED` transaction event is written atomically with the payment/refund update.
+
+### 4.10 GET `/v1/transactions/{id}`
+Returns receipt/details data, refund details, and `timeline` entries from `transaction_events`.
+
+Error responses use the standard error format. Lifecycle validation failures return `400`; missing transactions return `404`.
+
 ## 5. Unified Error Response Format
 
 Errors are serialized consistently across all endpoints. They derive from the custom error hierarchy in `@shared/errors/errors`.

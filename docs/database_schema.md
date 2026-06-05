@@ -37,6 +37,7 @@ The Payment Orchestration Platform uses time-ordered **UUIDv7** identifiers for 
 - **`api_keys` / `api_key_usage`**: Developer API authentication keys.
 - **`webhook_deliveries`**: Records incoming/outgoing webhooks.
 - **`event_store`**: Event sourcing store for compliance logs.
+- **`transaction_events`**: Immutable lifecycle history for merchant-facing transactions. Receipt timelines are sourced from this table.
 
 ---
 
@@ -48,10 +49,58 @@ To optimize lookup speeds, explicit indexing is applied to target query paths:
 - `api_keys(hashedKey)`: Unique index to authenticate API keys.
 - `outbox_events(status)`: Enables polling workers to quickly query `PENDING` outbox records.
 - `event_store(aggregateType, aggregateId)`: Optimizes auditing lookups by payment ID.
+- `payments(merchantId, status, createdAt)`: Supports transaction lifecycle filtering and date reporting.
+- `payments(merchantId, transactionType)`: Supports transaction type filters.
+- `payments(merchantId, cardBrand)`: Supports payment method filters.
+- `payments(merchantId, gatewayConfigId)`: Supports gateway filters.
+- `payments(merchantId, amount, createdAt)`: Supports amount/date reporting.
+- `transaction_events(paymentId, createdAt)`: Supports receipt timelines.
+- `transaction_events(eventType, createdAt)`: Supports lifecycle audit reporting.
 
 ---
 
-## 4. The Transactional Outbox Schema (`outbox_events`)
+## 4. Transaction Lifecycle Tables
+
+### `payments`
+
+The `payments` table is the single merchant-facing transaction table. The current lifecycle state is stored on the payment row.
+
+Relevant transaction columns:
+
+| Column | Description |
+|---|---|
+| `id` | Merchant-facing transaction ID. |
+| `transactionType` | `SALE`, `AUTH`, `REFUND`, or `VOID`. |
+| `status` | Current status: `PENDING`, `AUTHORIZED`, `CAPTURED`, `REFUNDED`, `VOIDED`, `FAILED`. |
+| `gatewayConfigId` | Gateway configuration used for processing. |
+| `paymentMethodType` | Method family such as `credit_card` or `echeck`. |
+| `cardBrand` / `cardLastFour` | Masked payment method display fields. |
+| `amount` | Original transaction amount. |
+| `refundableAmount` | Remaining refundable balance. |
+| `gatewayTransactionId` | Gateway processor reference. |
+| `receiptNumber` | Stable merchant receipt number. |
+
+AUTH capture updates the same row to `CAPTURED` and does not insert another merchant-facing payment.
+
+### `transaction_events`
+
+`transaction_events` is append-only lifecycle history.
+
+| Column | Description |
+|---|---|
+| `id` | Event ID. |
+| `paymentId` | Parent merchant-facing transaction. |
+| `eventType` | `AUTHORIZED`, `CAPTURED`, `VOIDED`, `REFUNDED`, `FAILED`, or `PENDING`. |
+| `fromStatus` / `toStatus` | State transition. |
+| `amount` | Amount associated with the transition. |
+| `gatewayTxnId` | Gateway reference for the transition. |
+| `reason` | Optional operator/customer reason. |
+| `metadata` | Structured metadata for audit context. |
+| `createdAt` | Immutable event timestamp. |
+
+---
+
+## 5. The Transactional Outbox Schema (`outbox_events`)
 
 The `outbox_events` table acts as a reliable buffer queue to ensure at-least-once delivery of event payloads.
 
@@ -69,7 +118,7 @@ The `outbox_events` table acts as a reliable buffer queue to ensure at-least-onc
 
 ---
 
-## 5. Soft Delete Pattern
+## 6. Soft Delete Pattern
 
 To ensure auditability, critical business entities (payments, users, gateway configs) are never deleted via `DELETE` SQL commands.
 - They include a nullable `deletedAt` field.
