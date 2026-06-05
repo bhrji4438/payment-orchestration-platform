@@ -10,7 +10,6 @@ import {
   Terminal, 
   Settings2, 
   LogOut,
-  Cpu,
   Loader2,
   Users
 } from 'lucide-react';
@@ -18,13 +17,13 @@ import { useAuthStore } from '@/store/authStore';
 import { authApi } from '@/lib/api';
 import { BRAND } from '@shared/constants/brand.constants';
 
+
 const SIDEBAR_ITEMS = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Customers', href: '/customers', icon: Users },
+  { name: 'Virtual Terminal', href: '/virtual-terminal', icon: Terminal },
   { name: 'Transactions', href: '/payments', icon: CreditCard },
   { name: 'Gateways', href: '/gateways', icon: Network },
-  { name: 'Console', href: '/console', icon: Terminal },
-  { name: 'Developer', href: '/developer', icon: Settings2 },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -72,9 +71,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Header */}
         <div className="h-16 flex items-center px-6 border-b border-zinc-800">
           <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-              <Cpu className="h-4 w-4 text-white" />
-            </div>
+            <img src="/logo.png" alt="Logo" width={32} height={32} className="rounded-lg shadow-lg shadow-indigo-500/10" />
             <div>
               <h1 className="font-bold text-zinc-50 text-sm leading-none">{BRAND.NAME}</h1>
               <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-semibold">{BRAND.PORTAL_SUBTITLE}</span>
@@ -129,12 +126,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto bg-[#0a0a0a]">
-        <div className="h-16 flex items-center px-8 border-b border-zinc-900 bg-zinc-950/50 backdrop-blur-md sticky top-0 z-10">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
-            <span className="text-xs font-semibold text-zinc-400 tracking-wider">Live Mode</span>
-          </div>
-        </div>
         <div className="p-8">
           {children}
         </div>

@@ -21,7 +21,8 @@
     "paths": {
       "@/*": ["./app/*"],
       "@shared/*": ["../shared/*"],
-      "@components/*": ["./components/*"]
+      "@components/*": ["./components/*"],
+      "zod": ["./node_modules/zod"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

@@ -4,6 +4,7 @@ import { gatewayFactory } from '@core/modules/gateways/factory/gateway.factory';
 import { CircuitBreaker } from '@core/modules/gateways/circuit-breaker';
 import { generateUuidV7 } from '@shared/ids/generate-uuid-v7';
 import { logger } from '@shared/logger/logger';
+import { credentialEncryptionService } from '@shared/crypto/credential-encryption';
 
 function redactCardData(rawResponse: string | undefined): string | undefined {
   if (!rawResponse) return rawResponse;
@@ -21,13 +22,21 @@ export class PaymentService {
   public async createPayment(params: {
     merchantId: string;
     amount: number;
-    currency: string;
+    currency?: string;
     gatewayConfigurationId?: string;
+    gatewayId?: string;
     customerId?: string;
     card?: any;
     token?: string;
-    capture: boolean;
+    capture?: boolean;
+    paymentMethodType?: 'credit_card' | 'echeck';
+    billingAddress?: any;
+    shippingAddress?: any;
+    customerSnapshot?: any;
+    paymentDetails?: any;
   }) {
+    const gatewayConfigId = params.gatewayId || params.gatewayConfigurationId;
+
     const activeConfigs = await prisma.merchantGatewayConfiguration.findMany({
       where: {
         merchantId: params.merchantId,
@@ -43,26 +52,62 @@ export class PaymentService {
     }
 
     let routeList = [...activeConfigs];
-    if (params.gatewayConfigurationId) {
-      const selected = activeConfigs.find(c => c.id === params.gatewayConfigurationId);
+    if (gatewayConfigId) {
+      const selected = activeConfigs.find(c => c.id === gatewayConfigId);
       if (!selected) {
         throw new Error('Requested gateway configuration is inactive or not found.');
       }
-      routeList = [selected, ...activeConfigs.filter(c => c.id !== params.gatewayConfigurationId)];
+      routeList = [selected, ...activeConfigs.filter(c => c.id !== gatewayConfigId)];
     }
 
+    // Resolve currency
+    const resolvedCurrency = await this.determineCurrency(params.merchantId, gatewayConfigId, params.currency);
+
+    // Resolve customer snapshot
+    let snapshot = params.customerSnapshot || null;
+    if (!snapshot && params.customerId) {
+      snapshot = await this.buildCustomerSnapshot(params.merchantId, params.customerId);
+    }
+
+    // Redact payment details
+    const savedPaymentDetails = this.redactSensitivePaymentDetails(params.paymentMethodType, params.paymentDetails);
+
     const paymentId = generateUuidV7();
+
+    let cardBrand = 'UNKNOWN';
+    let cardLastFour = 'MOCK';
+    let cardExpiry = 'MOCK';
+
+    if (params.paymentMethodType === 'credit_card' && params.paymentDetails) {
+      cardBrand = params.paymentDetails.cardNumber.startsWith('4') ? 'VISA' : 'MASTERCARD';
+      cardLastFour = params.paymentDetails.cardNumber.slice(-4);
+      cardExpiry = `${params.paymentDetails.expMonth}/${params.paymentDetails.expYear}`;
+    } else if (params.card) {
+      cardBrand = params.card.pan.startsWith('4') ? 'VISA' : 'MASTERCARD';
+      cardLastFour = params.card.pan.slice(-4);
+      cardExpiry = `${params.card.expiryMonth}/${params.card.expiryYear}`;
+    } else if (params.paymentMethodType === 'echeck' && params.paymentDetails) {
+      cardBrand = 'ECHECK';
+      cardLastFour = params.paymentDetails.accountNumber.slice(-4);
+      cardExpiry = 'ACH';
+    }
+
     await prisma.payment.create({
       data: {
         id: paymentId,
         merchantId: params.merchantId,
         customerId: params.customerId,
         amount: params.amount,
-        currency: params.currency,
+        currency: resolvedCurrency,
         status: 'PENDING',
-        cardBrand: params.card ? (params.card.pan.startsWith('4') ? 'VISA' : 'MASTERCARD') : 'UNKNOWN',
-        cardLastFour: params.card ? params.card.pan.slice(-4) : 'MOCK',
-        cardExpiry: params.card ? `${params.card.expiryMonth}/${params.card.expiryYear}` : 'MOCK',
+        cardBrand,
+        cardLastFour,
+        cardExpiry,
+        paymentMethodType: params.paymentMethodType || 'credit_card',
+        customerSnapshot: snapshot ?? undefined,
+        paymentDetails: savedPaymentDetails ?? undefined,
+        billingAddress: params.billingAddress || params.card?.billingAddress || undefined,
+        shippingAddress: params.shippingAddress || undefined,
         version: 1
       }
     });
@@ -82,29 +127,57 @@ export class PaymentService {
 
           const gateway = await gatewayFactory.create(params.merchantId, config.id);
 
-          const cardDetails = params.card ? {
-            pan: params.card.pan,
-            expiryMonth: params.card.expiryMonth,
-            expiryYear: params.card.expiryYear,
-            cvv: params.card.cvv,
-            holderName: params.card.holderName,
-            billingAddress: params.card.billingAddress
-          } : undefined;
-
           let gatewayResult;
 
-          if (params.capture) {
-            gatewayResult = await gateway.creditCardSale({
+          if (params.paymentMethodType === 'echeck') {
+            const echeckDetails = {
+              accountNumber: params.paymentDetails.accountNumber,
+              routingNumber: params.paymentDetails.routingNumber,
+              accountType: params.paymentDetails.accountType,
+              accountName: params.paymentDetails.accountHolderName,
+              billingAddress: params.billingAddress || snapshot?.billingAddress || undefined
+            };
+
+            gatewayResult = await gateway.echeckSale({
               amount: params.amount,
-              currency: params.currency,
-              card: cardDetails!
+              currency: resolvedCurrency,
+              echeck: echeckDetails
             });
           } else {
-            gatewayResult = await gateway.creditCardAuthorize({
-              amount: params.amount,
-              currency: params.currency,
-              card: cardDetails!
-            });
+            const cardDetails = params.paymentMethodType === 'credit_card' ? {
+              pan: params.paymentDetails.cardNumber,
+              expiryMonth: params.paymentDetails.expMonth,
+              expiryYear: params.paymentDetails.expYear.length === 2 ? `20${params.paymentDetails.expYear}` : params.paymentDetails.expYear,
+              cvv: params.paymentDetails.cvv,
+              holderName: params.paymentDetails.cardholderName,
+              billingAddress: params.billingAddress || snapshot?.billingAddress || undefined
+            } : params.card ? {
+              pan: params.card.pan,
+              expiryMonth: params.card.expiryMonth,
+              expiryYear: params.card.expiryYear,
+              cvv: params.card.cvv,
+              holderName: params.card.holderName,
+              billingAddress: params.card.billingAddress
+            } : undefined;
+
+            if (!cardDetails) {
+              throw new Error('No card details provided.');
+            }
+
+            const captureMode = params.capture !== false;
+            if (captureMode) {
+              gatewayResult = await gateway.creditCardSale({
+                amount: params.amount,
+                currency: resolvedCurrency,
+                card: cardDetails
+              });
+            } else {
+              gatewayResult = await gateway.creditCardAuthorize({
+                amount: params.amount,
+                currency: resolvedCurrency,
+                card: cardDetails
+              });
+            }
           }
 
           await prisma.paymentAttempt.create({
@@ -112,7 +185,7 @@ export class PaymentService {
               id: generateUuidV7(),
               paymentId,
               gatewayConfigId: config.id,
-              action: params.capture ? 'SALE' : 'AUTHORIZE',
+              action: params.paymentMethodType === 'echeck' ? 'SALE' : (params.capture !== false ? 'SALE' : 'AUTHORIZE'),
               amount: params.amount,
               status: gatewayResult.success ? 'SUCCESS' : 'FAILED',
               gatewayTxnId: gatewayResult.transactionReference || null,
@@ -152,7 +225,7 @@ export class PaymentService {
       if (!payment) throw new Error('Payment record not found.');
 
       if (successResponse && finalGatewayConfigId) {
-        const finalStatus = params.capture ? 'CAPTURED' : 'AUTHORIZED';
+        const finalStatus = (params.paymentMethodType === 'echeck' || params.capture !== false) ? 'CAPTURED' : 'AUTHORIZED';
         const updatedPayment = await repos.payments.update(
           paymentId,
           {
@@ -168,15 +241,15 @@ export class PaymentService {
           paymentId,
           amount: params.amount,
           type: 'CREDIT',
-          status: params.capture ? 'SETTLED' : 'PENDING'
+          status: (params.paymentMethodType === 'echeck' || params.capture !== false) ? 'SETTLED' : 'PENDING'
         });
 
-        const topic = params.capture ? 'payment.captured' : 'payment.authorized';
+        const topic = (params.paymentMethodType === 'echeck' || params.capture !== false) ? 'payment.captured' : 'payment.authorized';
         await repos.outbox.create(topic, paymentId, {
           paymentId,
           merchantId: params.merchantId,
           amount: params.amount,
-          currency: params.currency,
+          currency: resolvedCurrency,
           gatewayTxnId: successResponse.transactionReference,
           customerId: params.customerId
         });
@@ -196,7 +269,7 @@ export class PaymentService {
           error: lastError?.message || 'Gateway routing exhausted.'
         });
 
-        throw new Error(lastError?.message || 'Transaction failed across all gateway channels.');
+        return updatedPayment;
       }
     });
   }
@@ -481,6 +554,73 @@ export class PaymentService {
 
       return payment;
     });
+  }
+
+  private async determineCurrency(merchantId: string, gatewayConfigId?: string, clientCurrency?: string): Promise<string> {
+    if (gatewayConfigId) {
+      const config = await prisma.merchantGatewayConfiguration.findUnique({
+        where: { id: gatewayConfigId }
+      });
+      if (config) {
+        try {
+          const decrypted = JSON.parse(credentialEncryptionService.decrypt(config.encryptedCredentials));
+          if (decrypted && typeof decrypted.currency === 'string' && decrypted.currency.length === 3) {
+            return decrypted.currency.toUpperCase();
+          }
+        } catch (err) {
+          // ignore
+        }
+      }
+    }
+
+    const merchant = await prisma.merchant.findUnique({
+      where: { id: merchantId }
+    });
+    if (merchant && (merchant as any).currency) {
+      return (merchant as any).currency;
+    }
+
+    if (clientCurrency) {
+      return clientCurrency;
+    }
+
+    return 'USD';
+  }
+
+  private async buildCustomerSnapshot(merchantId: string, customerId: string) {
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, merchantId, deletedAt: null }
+    });
+    if (!customer) return null;
+    return {
+      email: customer.email,
+      phone: customer.phone,
+      billingAddress: customer.billingAddress,
+      shippingAddress: customer.shippingAddress
+    };
+  }
+
+  private redactSensitivePaymentDetails(paymentMethodType?: string, paymentDetails?: any) {
+    if (!paymentMethodType || !paymentDetails) return null;
+    if (paymentMethodType === 'credit_card') {
+      return {
+        cardholderName: paymentDetails.cardholderName,
+        cardLastFour: paymentDetails.cardNumber.slice(-4),
+        cardBrand: paymentDetails.cardNumber.startsWith('4') ? 'VISA' : 'MASTERCARD',
+        expMonth: paymentDetails.expMonth,
+        expYear: paymentDetails.expYear
+      };
+    }
+    if (paymentMethodType === 'echeck') {
+      return {
+        accountHolderName: paymentDetails.accountHolderName,
+        holderType: paymentDetails.holderType,
+        accountType: paymentDetails.accountType,
+        accountLastFour: paymentDetails.accountNumber.slice(-4),
+        routingNumber: paymentDetails.routingNumber.slice(0, 3) + '******'
+      };
+    }
+    return null;
   }
 }
 export const paymentService = new PaymentService();

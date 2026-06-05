@@ -25,11 +25,34 @@ router.post(
         amount: req.body.amount,
         currency: req.body.currency,
         gatewayConfigurationId: req.body.gatewayConfigurationId,
+        gatewayId: req.body.gatewayId,
         customerId: req.body.customerId,
         card: req.body.card,
         token: req.body.token,
-        capture: req.body.capture
+        capture: req.body.capture,
+        paymentMethodType: req.body.paymentMethodType,
+        billingAddress: req.body.billingAddress,
+        shippingAddress: req.body.shippingAddress,
+        customerSnapshot: req.body.customerSnapshot,
+        paymentDetails: req.body.paymentDetails
       });
+
+      if (!payment) {
+        res.status(500).json({ error: 'Failed to create payment record.' });
+        return;
+      }
+
+      if (payment.status === 'FAILED') {
+        const lastAttempt = await prisma.paymentAttempt.findFirst({
+          where: { paymentId: payment.id },
+          orderBy: { createdAt: 'desc' }
+        });
+        res.status(400).json({
+          error: lastAttempt?.responseMessage || 'Transaction failed across all gateway channels.',
+          paymentId: payment.id
+        });
+        return;
+      }
 
       res.status(201).json(payment);
     } catch (error: any) {
@@ -208,20 +231,69 @@ router.get('/payments/:id', async (req: AuthenticatedRequest, res: Response): Pr
 
 router.get('/transactions/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const transaction = await prisma.transaction.findFirst({
+    // 1. Try to find a payment record first (since virtual terminal uses paymentId)
+    let payment = await prisma.payment.findFirst({
       where: {
         id: req.params.id,
-        payment: { merchantId: req.merchantId! },
+        merchantId: req.merchantId!,
         deletedAt: null
+      },
+      include: {
+        gatewayConfig: true,
+        attempts: { orderBy: { createdAt: 'desc' } }
       }
     });
 
-    if (!transaction) {
-      res.status(404).json({ error: 'Transaction not found' });
+    // 2. If not found, try to find a transaction record and get its associated payment
+    if (!payment) {
+      const transaction = await prisma.transaction.findFirst({
+        where: {
+          id: req.params.id,
+          payment: { merchantId: req.merchantId! },
+          deletedAt: null
+        },
+        include: {
+          payment: {
+            include: {
+              gatewayConfig: true,
+              attempts: { orderBy: { createdAt: 'desc' } }
+            }
+          }
+        }
+      });
+
+      if (transaction) {
+        payment = transaction.payment;
+      }
+    }
+
+    if (!payment) {
+      res.status(404).json({ error: 'Transaction or Payment not found' });
       return;
     }
 
-    res.json(transaction);
+    const lastAttempt = payment.attempts[0];
+    const errorMsg = payment.status === 'FAILED' ? (lastAttempt?.responseMessage || 'Transaction failed') : undefined;
+
+    res.json({
+      transactionId: payment.id,
+      status: payment.status,
+      gateway: payment.gatewayConfig?.displayName || 'Direct',
+      customerSnapshot: payment.customerSnapshot,
+      paymentSnapshot: payment.paymentDetails,
+      receiptData: {
+        amount: payment.amount,
+        currency: payment.currency,
+        createdAt: payment.createdAt,
+        paymentMethodType: payment.paymentMethodType,
+        billingAddress: payment.billingAddress,
+        shippingAddress: payment.shippingAddress,
+        cardBrand: payment.cardBrand,
+        cardLastFour: payment.cardLastFour,
+        gatewayToken: payment.gatewayToken,
+        errorMsg: errorMsg
+      }
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

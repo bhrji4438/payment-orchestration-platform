@@ -61,7 +61,7 @@ export class CardpointeGatewayAdapter extends AbstractPaymentGateway {
     const url = `${baseUrl}/auth`;
 
     const card = request.card;
-    const expiry = `${card.expiryMonth.padStart(2, '0')}${card.expiryYear.slice(-2)}`;
+    const expiry = `${card.expiryYear.slice(-2)}${card.expiryMonth.padStart(2, '0')}`;
 
     const payload: any = {
       merchid: this.credentials.merchantid,
@@ -133,7 +133,7 @@ export class CardpointeGatewayAdapter extends AbstractPaymentGateway {
     const url = `${baseUrl}/auth`;
 
     const card = request.card;
-    const expiry = `${card.expiryMonth.padStart(2, '0')}${card.expiryYear.slice(-2)}`;
+    const expiry = `${card.expiryYear.slice(-2)}${card.expiryMonth.padStart(2, '0')}`;
 
     const payload = {
       merchid: this.credentials.merchantid,

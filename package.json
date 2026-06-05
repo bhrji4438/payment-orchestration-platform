@@ -13,6 +13,7 @@
     "test:core": "cd payment-platform-core && npm test"
   },
   "dependencies": {
-    "concurrently": "^10.0.3"
+    "concurrently": "^10.0.3",
+    "zod": "^4.4.3"
   }
 }

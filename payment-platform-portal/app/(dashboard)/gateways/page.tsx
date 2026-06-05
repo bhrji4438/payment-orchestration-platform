@@ -12,147 +12,204 @@ import {
   Trash2
 } from 'lucide-react';
 import { gatewaysApi } from '@/lib/api';
+import {
+  useFormValidation,
+  ValidationField,
+  InputErrorState,
+  SelectErrorState,
+  ValidationMessage,
+  FormErrorWrapper
+} from '@components/validation';
 
 const renderCredentialFields = (
   providerCode: string,
-  values: Record<string, string>,
-  onChange: (key: string, value: string) => void,
+  form: any,
   isEdit: boolean = false
 ) => {
-  const inputClass = "w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500 transition-colors";
-  const labelClass = "block text-xs font-medium text-zinc-400 mb-1.5";
+  const { values, errors, touched, handleChange, handleBlur, isFieldValid } = form;
 
   switch (providerCode) {
     case 'STRIPE':
       return (
-        <div>
-          <label className={labelClass}>API Key {!isEdit && <span className="text-red-500">*</span>}</label>
-          <input
-            required={!isEdit}
+        <ValidationField
+          id="apiKey"
+          label={isEdit ? "API Key (leave blank to keep current)" : "API Key *"}
+          error={errors.apiKey}
+          isTouched={touched.apiKey}
+          isValid={isFieldValid('apiKey')}
+        >
+          <InputErrorState
+            id="apiKey"
             type="password"
             placeholder={isEdit ? "Enter new API key to update..." : "sk_test_..."}
-            value={values.apiKey || ''}
-            onChange={e => onChange('apiKey', e.target.value)}
-            className={inputClass}
+            value={values.apiKey}
+            onChange={e => handleChange('apiKey', e.target.value)}
+            onBlur={() => handleBlur('apiKey')}
           />
-        </div>
+        </ValidationField>
       );
     case 'NMI':
       return (
         <div className="space-y-4">
-          <div>
-            <label className={labelClass}>Username {!isEdit && <span className="text-red-500">*</span>}</label>
-            <input
-              required={!isEdit}
+          <ValidationField
+            id="username"
+            label={isEdit ? "Username (leave blank to keep current)" : "Username *"}
+            error={errors.username}
+            isTouched={touched.username}
+            isValid={isFieldValid('username')}
+          >
+            <InputErrorState
+              id="username"
               type="text"
               placeholder={isEdit ? "Enter new username to update..." : "Username.."}
-              value={values.username || ''}
-              onChange={e => onChange('username', e.target.value)}
-              className={inputClass}
+              value={values.username}
+              onChange={e => handleChange('username', e.target.value)}
+              onBlur={() => handleBlur('username')}
             />
-          </div>
-          <div>
-            <label className={labelClass}>Password {!isEdit && <span className="text-red-500">*</span>}</label>
-            <input
-              required={!isEdit}
+          </ValidationField>
+          <ValidationField
+            id="password"
+            label={isEdit ? "Password (leave blank to keep current)" : "Password *"}
+            error={errors.password}
+            isTouched={touched.password}
+            isValid={isFieldValid('password')}
+          >
+            <InputErrorState
+              id="password"
               type="password"
               placeholder={isEdit ? "Enter new password to update..." : "password.."}
-              value={values.password || ''}
-              onChange={e => onChange('password', e.target.value)}
-              className={inputClass}
+              value={values.password}
+              onChange={e => handleChange('password', e.target.value)}
+              onBlur={() => handleBlur('password')}
             />
-          </div>
+          </ValidationField>
         </div>
       );
     case 'AUTHORIZE_NET':
       return (
         <div className="space-y-4">
-          <div>
-            <label className={labelClass}>Login ID {!isEdit && <span className="text-red-500">*</span>}</label>
-            <input
-              required={!isEdit}
+          <ValidationField
+            id="loginId"
+            label={isEdit ? "Login ID (leave blank to keep current)" : "Login ID *"}
+            error={errors.loginId}
+            isTouched={touched.loginId}
+            isValid={isFieldValid('loginId')}
+          >
+            <InputErrorState
+              id="loginId"
               type="text"
               placeholder={isEdit ? "Enter new Login ID to update..." : "Login ID"}
-              value={values.loginId || ''}
-              onChange={e => onChange('loginId', e.target.value)}
-              className={inputClass}
+              value={values.loginId}
+              onChange={e => handleChange('loginId', e.target.value)}
+              onBlur={() => handleBlur('loginId')}
             />
-          </div>
-          <div>
-            <label className={labelClass}>Transaction Key {!isEdit && <span className="text-red-500">*</span>}</label>
-            <input
-              required={!isEdit}
+          </ValidationField>
+          <ValidationField
+            id="transactionKey"
+            label={isEdit ? "Transaction Key (leave blank to keep current)" : "Transaction Key *"}
+            error={errors.transactionKey}
+            isTouched={touched.transactionKey}
+            isValid={isFieldValid('transactionKey')}
+          >
+            <InputErrorState
+              id="transactionKey"
               type="password"
               placeholder={isEdit ? "Enter new Transaction Key to update..." : "Transaction Key"}
-              value={values.transactionKey || ''}
-              onChange={e => onChange('transactionKey', e.target.value)}
-              className={inputClass}
+              value={values.transactionKey}
+              onChange={e => handleChange('transactionKey', e.target.value)}
+              onBlur={() => handleBlur('transactionKey')}
             />
-          </div>
+          </ValidationField>
         </div>
       );
     case 'CARDPOINTE':
     case 'CUSTOM':
       return (
         <div className="space-y-4">
-          <div>
-            <label className={labelClass}>Merchant ID {!isEdit && <span className="text-red-500">*</span>}</label>
-            <input
-              required={!isEdit}
+          <ValidationField
+            id="merchantid"
+            label={isEdit ? "Merchant ID (leave blank to keep current)" : "Merchant ID *"}
+            error={errors.merchantid}
+            isTouched={touched.merchantid}
+            isValid={isFieldValid('merchantid')}
+          >
+            <InputErrorState
+              id="merchantid"
               type="text"
               placeholder={isEdit ? "Enter new Merchant ID to update..." : "Merchant ID"}
-              value={values.merchantid || ''}
-              onChange={e => onChange('merchantid', e.target.value)}
-              className={inputClass}
+              value={values.merchantid}
+              onChange={e => handleChange('merchantid', e.target.value)}
+              onBlur={() => handleBlur('merchantid')}
             />
-          </div>
-          <div>
-            <label className={labelClass}>Username {!isEdit && <span className="text-red-500">*</span>}</label>
-            <input
-              required={!isEdit}
+          </ValidationField>
+          <ValidationField
+            id="cardpointeuser"
+            label={isEdit ? "Username (leave blank to keep current)" : "Username *"}
+            error={errors.cardpointeuser}
+            isTouched={touched.cardpointeuser}
+            isValid={isFieldValid('cardpointeuser')}
+          >
+            <InputErrorState
+              id="cardpointeuser"
               type="text"
               placeholder={isEdit ? "Enter new username to update..." : "Username"}
-              value={values.cardpointeuser || ''}
-              onChange={e => onChange('cardpointeuser', e.target.value)}
-              className={inputClass}
+              value={values.cardpointeuser}
+              onChange={e => handleChange('cardpointeuser', e.target.value)}
+              onBlur={() => handleBlur('cardpointeuser')}
             />
-          </div>
-          <div>
-            <label className={labelClass}>Password {!isEdit && <span className="text-red-500">*</span>}</label>
-            <input
-              required={!isEdit}
+          </ValidationField>
+          <ValidationField
+            id="cardpointepass"
+            label={isEdit ? "Password (leave blank to keep current)" : "Password *"}
+            error={errors.cardpointepass}
+            isTouched={touched.cardpointepass}
+            isValid={isFieldValid('cardpointepass')}
+          >
+            <InputErrorState
+              id="cardpointepass"
               type="password"
               placeholder={isEdit ? "Enter new password to update..." : "Password"}
-              value={values.cardpointepass || ''}
-              onChange={e => onChange('cardpointepass', e.target.value)}
-              className={inputClass}
+              value={values.cardpointepass}
+              onChange={e => handleChange('cardpointepass', e.target.value)}
+              onBlur={() => handleBlur('cardpointepass')}
             />
-          </div>
-          <div>
-            <label className={labelClass}>Site Name (Optional)</label>
-            <input
+          </ValidationField>
+          <ValidationField
+            id="siteName"
+            label="Site Name (Optional)"
+            error={errors.siteName}
+            isTouched={touched.siteName}
+            isValid={isFieldValid('siteName')}
+          >
+            <InputErrorState
+              id="siteName"
               type="text"
               placeholder="fts"
-              value={values.siteName || ''}
-              onChange={e => onChange('siteName', e.target.value)}
-              className={inputClass}
+              value={values.siteName}
+              onChange={e => handleChange('siteName', e.target.value)}
+              onBlur={() => handleBlur('siteName')}
             />
-          </div>
+          </ValidationField>
         </div>
       );
     default:
       return (
-        <div>
-          <label className={labelClass}>API Secret Key {!isEdit && <span className="text-red-500">*</span>}</label>
-          <input
-            required={!isEdit}
+        <ValidationField
+          id="secretKey"
+          label={isEdit ? "API Secret Key (leave blank to keep current)" : "API Secret Key *"}
+          error={errors.secretKey}
+          isTouched={touched.secretKey}
+          isValid={isFieldValid('secretKey')}
+        >
+          <InputErrorState
+            id="secretKey"
             type="password"
             placeholder={isEdit ? "Enter new key to update..." : "sk_test_..."}
-            value={values.secretKey || ''}
-            onChange={e => onChange('secretKey', e.target.value)}
-            className={inputClass}
+            value={values.secretKey}
+            onChange={e => handleChange('secretKey', e.target.value)}
+            onBlur={() => handleBlur('secretKey')}
           />
-        </div>
+        </ValidationField>
       );
   }
 };
@@ -163,9 +220,162 @@ export default function GatewaysPage() {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [editingConfig, setEditingConfig] = useState<any>(null);
-  const [newConfig, setNewConfig] = useState({ providerId: '', displayName: '', priority: 1, secretKey: '' });
-  const [credentialsInput, setCredentialsInput] = useState<Record<string, string>>({});
+
+  // Form Validation hook for Add Gateway
+  const addForm = useFormValidation({
+    initialValues: {
+      providerId: '',
+      displayName: '',
+      priority: 1,
+      apiKey: '',
+      username: '',
+      password: '',
+      loginId: '',
+      transactionKey: '',
+      merchantid: '',
+      cardpointeuser: '',
+      cardpointepass: '',
+      siteName: '',
+      secretKey: ''
+    },
+    validate: (vals) => {
+      const errs: Record<string, string> = {};
+      if (!vals.providerId) errs.providerId = 'Provider is required';
+      if (!vals.displayName.trim()) errs.displayName = 'Display name is required';
+      if (!vals.priority || vals.priority < 1) errs.priority = 'Priority must be at least 1';
+
+      const provider = providers.find(p => p.id === vals.providerId);
+      const code = provider?.code?.toUpperCase() || '';
+
+      if (code === 'STRIPE') {
+        if (!vals.apiKey.trim()) errs.apiKey = 'API Key is required';
+      } else if (code === 'NMI') {
+        if (!vals.username.trim()) errs.username = 'Username is required';
+        if (!vals.password.trim()) errs.password = 'Password is required';
+      } else if (code === 'AUTHORIZE_NET') {
+        if (!vals.loginId.trim()) errs.loginId = 'Login ID is required';
+        if (!vals.transactionKey.trim()) errs.transactionKey = 'Transaction Key is required';
+      } else if (code === 'CARDPOINTE' || code === 'CUSTOM') {
+        if (!vals.merchantid.trim()) errs.merchantid = 'Merchant ID is required';
+        if (!vals.cardpointeuser.trim()) errs.cardpointeuser = 'Username is required';
+        if (!vals.cardpointepass.trim()) errs.cardpointepass = 'Password is required';
+      } else if (vals.providerId) {
+        if (!vals.secretKey.trim()) errs.secretKey = 'API Secret Key is required';
+      }
+      return errs;
+    },
+    onSubmit: async (vals) => {
+      const provider = providers.find(p => p.id === vals.providerId);
+      const code = provider?.code?.toUpperCase() || '';
+      
+      const credentials: Record<string, string> = {};
+      const addCred = (key: string, value: string) => {
+        if (value.trim()) credentials[key] = value.trim();
+      };
+
+      if (code === 'STRIPE') {
+        addCred('apiKey', vals.apiKey);
+      } else if (code === 'NMI') {
+        addCred('username', vals.username);
+        addCred('password', vals.password);
+      } else if (code === 'AUTHORIZE_NET') {
+        addCred('loginId', vals.loginId);
+        addCred('transactionKey', vals.transactionKey);
+      } else if (code === 'CARDPOINTE' || code === 'CUSTOM') {
+        addCred('merchantid', vals.merchantid);
+        addCred('cardpointeuser', vals.cardpointeuser);
+        addCred('cardpointepass', vals.cardpointepass);
+        addCred('siteName', vals.siteName);
+      } else {
+        addCred('secretKey', vals.secretKey);
+      }
+
+      try {
+        await gatewaysApi.createConfiguration({
+          gatewayProviderId: vals.providerId,
+          displayName: vals.displayName,
+          priority: vals.priority,
+          credentials
+        });
+        setShowAddModal(false);
+        addForm.resetForm();
+        fetchData();
+      } catch (err: any) {
+        addForm.setFieldError('submit', err.response?.data?.error || 'Failed to add gateway');
+      }
+    }
+  });
+
+  // Form Validation hook for Edit Gateway
+  const editForm = useFormValidation({
+    initialValues: {
+      id: '',
+      providerId: '',
+      providerName: '',
+      providerCode: '',
+      displayName: '',
+      priority: 1,
+      isActive: true,
+      apiKey: '',
+      username: '',
+      password: '',
+      loginId: '',
+      transactionKey: '',
+      merchantid: '',
+      cardpointeuser: '',
+      cardpointepass: '',
+      siteName: '',
+      secretKey: ''
+    },
+    validate: (vals) => {
+      const errs: Record<string, string> = {};
+      if (!vals.displayName.trim()) errs.displayName = 'Display name is required';
+      if (!vals.priority || vals.priority < 1) errs.priority = 'Priority must be at least 1';
+      return errs;
+    },
+    onSubmit: async (vals) => {
+      const credentials: Record<string, string> = {};
+      const addCred = (key: string, value: string) => {
+        if (value.trim()) credentials[key] = value.trim();
+      };
+
+      const code = vals.providerCode;
+      if (code === 'STRIPE') {
+        addCred('apiKey', vals.apiKey);
+      } else if (code === 'NMI') {
+        addCred('username', vals.username);
+        addCred('password', vals.password);
+      } else if (code === 'AUTHORIZE_NET') {
+        addCred('loginId', vals.loginId);
+        addCred('transactionKey', vals.transactionKey);
+      } else if (code === 'CARDPOINTE' || code === 'CUSTOM') {
+        addCred('merchantid', vals.merchantid);
+        addCred('cardpointeuser', vals.cardpointeuser);
+        addCred('cardpointepass', vals.cardpointepass);
+        addCred('siteName', vals.siteName);
+      } else {
+        addCred('secretKey', vals.secretKey);
+      }
+
+      const payload: any = {
+        displayName: vals.displayName,
+        priority: vals.priority,
+        isActive: vals.isActive
+      };
+      if (Object.keys(credentials).length > 0) {
+        payload.credentials = credentials;
+      }
+
+      try {
+        await gatewaysApi.updateConfiguration(vals.id, payload);
+        setShowEditModal(false);
+        editForm.resetForm();
+        fetchData();
+      } catch (err: any) {
+        editForm.setFieldError('submit', err.response?.data?.error || 'Failed to update gateway');
+      }
+    }
+  });
 
   const fetchData = async () => {
     setLoading(true);
@@ -187,64 +397,12 @@ export default function GatewaysPage() {
     fetchData();
   }, []);
 
-  const handleAddSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const credentials: Record<string, string> = {};
-      Object.entries(credentialsInput).forEach(([k, v]) => {
-        if (v.trim() !== '') {
-          credentials[k] = v.trim();
-        }
-      });
-
-      await gatewaysApi.createConfiguration({
-        gatewayProviderId: newConfig.providerId,
-        displayName: newConfig.displayName,
-        priority: newConfig.priority,
-        credentials
-      });
-      setShowAddModal(false);
-      setNewConfig({ providerId: '', displayName: '', priority: 1, secretKey: '' });
-      setCredentialsInput({});
-      fetchData();
-    } catch (err) {
-      alert('Failed to add gateway');
-    }
-  };
-
   const resetCircuit = async (id: string) => {
     try {
       await gatewaysApi.resetCircuit(id);
       fetchData();
     } catch (err) {
       alert('Failed to reset circuit breaker');
-    }
-  };
-
-  const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const payload: any = {
-        displayName: editingConfig.displayName,
-        priority: editingConfig.priority,
-        isActive: editingConfig.isActive
-      };
-      const credentials: Record<string, string> = {};
-      Object.entries(credentialsInput).forEach(([k, v]) => {
-        if (v.trim() !== '') {
-          credentials[k] = v.trim();
-        }
-      });
-      if (Object.keys(credentials).length > 0) {
-        payload.credentials = credentials;
-      }
-      await gatewaysApi.updateConfiguration(editingConfig.id, payload);
-      setShowEditModal(false);
-      setEditingConfig(null);
-      setCredentialsInput({});
-      fetchData();
-    } catch (err) {
-      alert('Failed to update gateway');
     }
   };
 
@@ -257,6 +415,30 @@ export default function GatewaysPage() {
         alert('Failed to delete gateway');
       }
     }
+  };
+
+  const openEditModal = (g: any) => {
+    editForm.setValues({
+      id: g.id,
+      providerId: g.provider.id,
+      providerName: g.provider.name,
+      providerCode: g.provider.code.toUpperCase(),
+      displayName: g.displayName,
+      priority: g.priority,
+      isActive: g.isActive,
+      apiKey: '',
+      username: '',
+      password: '',
+      loginId: '',
+      transactionKey: '',
+      merchantid: '',
+      cardpointeuser: '',
+      cardpointepass: '',
+      siteName: '',
+      secretKey: ''
+    });
+    editForm.setErrors({});
+    setShowEditModal(true);
   };
 
   if (loading && configs.length === 0) {
@@ -276,8 +458,7 @@ export default function GatewaysPage() {
         </div>
         <button 
           onClick={() => {
-            setNewConfig({ providerId: '', displayName: '', priority: 1, secretKey: '' });
-            setCredentialsInput({});
+            addForm.resetForm();
             setShowAddModal(true);
           }}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm text-white font-medium transition-all shadow-[0_0_15px_rgba(79,70,229,0.3)]"
@@ -363,11 +544,7 @@ export default function GatewaysPage() {
                   </button>
                 )}
                 <button 
-                  onClick={() => {
-                    setEditingConfig({ ...g });
-                    setCredentialsInput({});
-                    setShowEditModal(true);
-                  }}
+                  onClick={() => openEditModal(g)}
                   className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-md transition-colors flex items-center gap-1"
                 >
                   <Settings className="h-3 w-3" /> Edit
@@ -386,133 +563,166 @@ export default function GatewaysPage() {
 
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-zinc-50 mb-4">Add Gateway</h3>
-            <form onSubmit={handleAddSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">Provider</label>
-                <select
-                  required
-                  value={newConfig.providerId}
+            <FormErrorWrapper onSubmit={addForm.handleSubmit} className="space-y-4">
+              <ValidationField
+                id="providerId"
+                label="Provider"
+                error={addForm.errors.providerId}
+                isTouched={addForm.touched.providerId}
+                isValid={addForm.isFieldValid('providerId')}
+              >
+                <SelectErrorState
+                  id="providerId"
+                  value={addForm.values.providerId}
                   onChange={e => {
-                    setNewConfig({...newConfig, providerId: e.target.value});
-                    setCredentialsInput({});
+                    addForm.handleChange('providerId', e.target.value);
                   }}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-300"
+                  onBlur={() => addForm.handleBlur('providerId')}
                 >
                   <option value="">Select a provider...</option>
                   {providers.map(p => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">Display Name</label>
-                <input
-                  required
+                </SelectErrorState>
+              </ValidationField>
+
+              <ValidationField
+                id="displayName"
+                label="Display Name"
+                error={addForm.errors.displayName}
+                isTouched={addForm.touched.displayName}
+                isValid={addForm.isFieldValid('displayName')}
+              >
+                <InputErrorState
+                  id="displayName"
                   type="text"
                   placeholder="e.g. Primary Stripe US"
-                  value={newConfig.displayName}
-                  onChange={e => setNewConfig({...newConfig, displayName: e.target.value})}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-300"
+                  value={addForm.values.displayName}
+                  onChange={e => addForm.handleChange('displayName', e.target.value)}
+                  onBlur={() => addForm.handleBlur('displayName')}
                 />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">Priority (1 = Highest)</label>
-                <input
-                  required
+              </ValidationField>
+
+              <ValidationField
+                id="priority"
+                label="Priority (1 = Highest)"
+                error={addForm.errors.priority}
+                isTouched={addForm.touched.priority}
+                isValid={addForm.isFieldValid('priority')}
+              >
+                <InputErrorState
+                  id="priority"
                   type="number"
                   min="1"
-                  value={newConfig.priority}
-                  onChange={e => setNewConfig({...newConfig, priority: parseInt(e.target.value)})}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-300"
+                  value={addForm.values.priority}
+                  onChange={e => addForm.handleChange('priority', parseInt(e.target.value))}
+                  onBlur={() => addForm.handleBlur('priority')}
                 />
-              </div>
+              </ValidationField>
+
               {(() => {
-                const selectedProvider = providers.find(p => p.id === newConfig.providerId);
+                const selectedProvider = providers.find(p => p.id === addForm.values.providerId);
                 const providerCode = selectedProvider?.code?.toUpperCase() || '';
-                return renderCredentialFields(
-                  providerCode,
-                  credentialsInput,
-                  (key, val) => setCredentialsInput(prev => ({ ...prev, [key]: val })),
-                  false
-                );
+                return renderCredentialFields(providerCode, addForm, false);
               })()}
+
+              <ValidationMessage id="add-submit-error" error={addForm.errors.submit} />
+
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-2 rounded-lg bg-zinc-800 text-sm font-medium text-zinc-300">
                   Cancel
                 </button>
-                <button type="submit" className="flex-1 py-2 rounded-lg bg-indigo-600 text-sm font-medium text-white">
+                <button type="submit" className="flex-1 py-2 rounded-lg bg-indigo-600 text-sm font-medium text-white shadow-[0_0_15px_rgba(79,70,229,0.3)]">
                   Save Config
                 </button>
               </div>
-            </form>
+            </FormErrorWrapper>
           </div>
         </div>
       )}
 
-      {showEditModal && editingConfig && (
+      {showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-zinc-50 mb-4">Edit Gateway</h3>
-            <form onSubmit={handleEditSubmit} className="space-y-4">
+            <FormErrorWrapper onSubmit={editForm.handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">Provider</label>
+                <label className="block text-xs font-semibold text-zinc-400 mb-1.5">Provider</label>
                 <input
                   disabled
-                  value={editingConfig.provider.name}
+                  value={editForm.values.providerName}
                   className="w-full bg-zinc-950/50 border border-zinc-800/50 rounded-lg p-2.5 text-sm text-zinc-500 cursor-not-allowed"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">Display Name</label>
-                <input
-                  required
+
+              <ValidationField
+                id="displayName"
+                label="Display Name"
+                error={editForm.errors.displayName}
+                isTouched={editForm.touched.displayName}
+                isValid={editForm.isFieldValid('displayName')}
+              >
+                <InputErrorState
+                  id="displayName"
                   type="text"
-                  value={editingConfig.displayName}
-                  onChange={e => setEditingConfig({...editingConfig, displayName: e.target.value})}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-300"
+                  value={editForm.values.displayName}
+                  onChange={e => editForm.handleChange('displayName', e.target.value)}
+                  onBlur={() => editForm.handleBlur('displayName')}
                 />
-              </div>
+              </ValidationField>
+
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1.5">Priority</label>
-                  <input
-                    required
+                <ValidationField
+                  id="priority"
+                  label="Priority"
+                  error={editForm.errors.priority}
+                  isTouched={editForm.touched.priority}
+                  isValid={editForm.isFieldValid('priority')}
+                >
+                  <InputErrorState
+                    id="priority"
                     type="number"
                     min="1"
-                    value={editingConfig.priority}
-                    onChange={e => setEditingConfig({...editingConfig, priority: parseInt(e.target.value)})}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-300"
+                    value={editForm.values.priority}
+                    onChange={e => editForm.handleChange('priority', parseInt(e.target.value))}
+                    onBlur={() => editForm.handleBlur('priority')}
                   />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1.5">Status</label>
-                  <select
-                    value={editingConfig.isActive ? 'true' : 'false'}
-                    onChange={e => setEditingConfig({...editingConfig, isActive: e.target.value === 'true'})}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 text-sm text-zinc-300"
+                </ValidationField>
+
+                <ValidationField
+                  id="isActive"
+                  label="Status"
+                  error={editForm.errors.isActive}
+                  isTouched={editForm.touched.isActive}
+                  isValid={editForm.isFieldValid('isActive')}
+                >
+                  <SelectErrorState
+                    id="isActive"
+                    value={editForm.values.isActive ? 'true' : 'false'}
+                    onChange={e => editForm.handleChange('isActive', e.target.value === 'true')}
+                    onBlur={() => editForm.handleBlur('isActive')}
                   >
                     <option value="true">Active</option>
                     <option value="false">Inactive</option>
-                  </select>
-                </div>
+                  </SelectErrorState>
+                </ValidationField>
               </div>
-              {renderCredentialFields(
-                editingConfig.provider.code.toUpperCase(),
-                credentialsInput,
-                (key, val) => setCredentialsInput(prev => ({ ...prev, [key]: val })),
-                true
-              )}
+
+              {renderCredentialFields(editForm.values.providerCode, editForm, true)}
+
+              <ValidationMessage id="edit-submit-error" error={editForm.errors.submit} />
+
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowEditModal(false)} className="flex-1 py-2 rounded-lg bg-zinc-800 text-sm font-medium text-zinc-300">
                   Cancel
                 </button>
-                <button type="submit" className="flex-1 py-2 rounded-lg bg-indigo-600 text-sm font-medium text-white">
+                <button type="submit" className="flex-1 py-2 rounded-lg bg-indigo-600 text-sm font-medium text-white shadow-[0_0_15px_rgba(79,70,229,0.3)]">
                   Save Changes
                 </button>
               </div>
-            </form>
+            </FormErrorWrapper>
           </div>
         </div>
       )}

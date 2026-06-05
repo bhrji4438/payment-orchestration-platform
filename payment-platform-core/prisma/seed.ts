@@ -10,6 +10,8 @@ async function main() {
   console.log('Seeding Database...');
 
   // 1. Clean Database
+  await prisma.settlementItem.deleteMany({});
+  await prisma.settlement.deleteMany({});
   await prisma.apiKeyUsage.deleteMany({});
   await prisma.apiKey.deleteMany({});
   await prisma.webhookDelivery.deleteMany({});
@@ -243,7 +245,21 @@ async function main() {
       cardBrand: 'VISA',
       cardLastFour: '4242',
       cardExpiry: '12/2028',
-      gatewayToken: 'pi_mock_123456'
+      gatewayToken: 'pi_mock_123456',
+      paymentMethodType: 'credit_card',
+      customerSnapshot: {
+        email: 'john.doe@gmail.com',
+        phone: '+1234567890',
+        billingAddress: null,
+        shippingAddress: null
+      },
+      paymentDetails: {
+        cardholderName: 'John Doe',
+        cardLastFour: '4242',
+        cardBrand: 'VISA',
+        expMonth: '12',
+        expYear: '2028'
+      }
     }
   });
 

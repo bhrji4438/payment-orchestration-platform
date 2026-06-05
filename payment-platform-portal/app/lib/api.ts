@@ -126,7 +126,7 @@ export const paymentsApi = {
   getPayments: (params?: { status?: string; search?: string; limit?: number; cursor?: string }) =>
     api.get('/v1/payments', { params }),
   getPayment: (id: string) => api.get(`/v1/payments/${id}`),
-  createPayment: (data: any) => api.post('/v1/payments', data)
+  createPayment: (data: any, config?: any) => api.post('/v1/payments', data, config)
 };
 
 // ─── Gateways API calls ────────────────────────────────────────────────────
@@ -153,4 +153,8 @@ export const customersApi = {
   createCustomer: (data: any) => api.post('/v1/customers', data),
   updateCustomer: (id: string, data: any) => api.put(`/v1/customers/${id}`, data),
   updateStatus: (id: string, isActive: boolean) => api.put(`/v1/customers/${id}/status`, { isActive })
+};
+
+export const transactionsApi = {
+  getTransaction: (id: string) => api.get(`/v1/transactions/${id}`)
 };

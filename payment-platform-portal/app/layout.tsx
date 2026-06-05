@@ -5,6 +5,11 @@ import { BRAND } from '@shared/constants/brand.constants';
 export const metadata = {
   title: BRAND.NAME,
   description: BRAND.PORTAL_DESCRIPTION,
+  icons: {
+    icon: '/logo.png',
+    shortcut: '/logo.png',
+    apple: '/logo.png',
+  },
 };
 
 import { Providers } from './providers';
